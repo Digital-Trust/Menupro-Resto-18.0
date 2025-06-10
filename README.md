@@ -22,7 +22,6 @@ The main Odoo Apps include an [Open Source CRM](https://www.odoo.com/page/crm),
 Odoo Apps can be used as stand-alone applications, but they also integrate seamlessly so you get
 a full-featured [Open Source ERP](https://www.odoo.com) when you install several Apps.
 
-
 ## Getting started with Odoo
 
 For a standard installation please follow the [Setup instructions](https://www.odoo.com/documentation/master/administration/install/install.html)
