@@ -9,6 +9,7 @@ import {
 } from "@point_of_sale/app/store/make_awaitable_dialog";
 import { ComboConfiguratorPopup } from  "@point_of_sale/app/store/combo_configurator_popup/combo_configurator_popup";
 import { computeComboItems } from "@point_of_sale/app/models/utils/compute_combo_items";
+import { _t } from "@web/core/l10n/translation";
 
 const { DateTime } = luxon;
 

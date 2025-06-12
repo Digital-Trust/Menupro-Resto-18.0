@@ -1,4 +1,7 @@
 from odoo import models, fields
+import logging
+
+logger = logging.getLogger(__name__)
 
 class HrEmployee(models.Model):
     _inherit = 'hr.employee'
@@ -13,6 +16,7 @@ class HrEmployee(models.Model):
     )
 
     def _load_pos_data_fields(self, pos_config_id):
+        logger.info("=======================================================================================Test Deploy====================================================")
         fields = super()._load_pos_data_fields(pos_config_id)
         if 'allowed_floor_ids' not in fields:
             fields.append('allowed_floor_ids')
