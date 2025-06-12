@@ -44,11 +44,11 @@
                 'custom_module/static/src/scss/styles.scss',
                 'custom_module/static/src/img/favicon.ico',
                 'custom_module/static/src/scss/custom_pwa.scss',
-                'custom_module/static/src/scss/login_screen.scss',
+                # 'custom_module/static/src/scss/login_screen.scss',
             ],
             'web.assets_frontend' : [
-                'custom_module/static/src/scss/login.scss',
-                'custom_module/static/src/scss/login_screen.scss',
+                # 'custom_module/static/src/scss/login.scss',
+                # 'custom_module/static/src/scss/login_screen.scss',
                 'custom_module/static/src/img/favicon.ico',
 
             ],
@@ -57,7 +57,7 @@
                 'custom_module/static/src/scss/pos.scss',
                 'custom_module/static/src/scss/receipt.scss',
                 'custom_module/static/src/css/pos_receipt.css',
-                'custom_module/static/src/scss/login_screen.scss',
+                # 'custom_module/static/src/scss/login_screen.scss',
                 'custom_module/static/src/xml/saver_screen_inherit.xml',
                 'custom_module/static/src/xml/cashier_name_inherit.xml',
                 # 'custom_module/static/src/xml/order_change_receipt_template_inherit.xml',
