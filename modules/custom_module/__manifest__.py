@@ -60,21 +60,13 @@
                 'custom_module/static/src/scss/login_screen.scss',
                 'custom_module/static/src/xml/saver_screen_inherit.xml',
                 'custom_module/static/src/xml/cashier_name_inherit.xml',
-<<<<<<< HEAD
                 # 'custom_module/static/src/xml/order_change_receipt_template_inherit.xml',
                 # 'custom_module/static/src/js/pos_navbar_inherit.js',
                 # 'custom_module/static/src/xml/pos_navbar_template_inherit.xml',
                 # 'custom_module/static/src/js/pos_store_inherit.js',
                 # 'custom_module/static/src/js/pos_order_inherit.js',
                 # 'custom_module/static/src/js/floor_screen_inherit.js',
-=======
-                'custom_module/static/src/xml/order_change_receipt_template_inherit.xml',
-                'custom_module/static/src/js/pos_navbar_inherit.js',
-                'custom_module/static/src/xml/pos_navbar_template_inherit.xml',
-                #'custom_module/static/src/js/pos_store_inherit.js',
-                'custom_module/static/src/js/pos_order_inherit.js',
-                'custom_module/static/src/js/floor_screen_inherit.js',
->>>>>>> 60e2f9cfed8a1f61282ebfb0a1775e1675e8399d
+
                 'custom_module/static/src/xml/receipt_header.xml',
                 # 'custom_module/static/src/js/pos_order_inherit.js',
                 # 'custom_module/static/src/js/action_widget_inherit.js',
