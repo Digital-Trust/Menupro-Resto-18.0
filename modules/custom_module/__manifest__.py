@@ -15,7 +15,6 @@
         'views/menus/list_menu.xml',
         'views/point_of_sale_dashboard_inherit.xml',
         'views/menus/tree_products.xml',
-
         #Table Tags
         'views/restaurant_floor.xml',
         'views/table_tags.xml',
@@ -25,8 +24,6 @@
         'views/stock/product_template_stock.xml',
         'views/stock/stock_picking_views_inherit.xml',
         'views/stock/mrp_bom_views_inherit.xml',
-
-
     ],
     'assets': {
             'web.assets_backend': [
@@ -64,7 +61,6 @@
                 'custom_module/static/src/xml/point_of_sale_control_buttons_inherit.xml',
                 'custom_module/static/src/js/product_screen_inherit.js',
                 'custom_module/static/src/js/closing_popup_inherit.js',
-
             ],
     },
     'images': [
