@@ -32,10 +32,10 @@ class ProductTemplate(models.Model):
     @api.depends('bom_ids.cost_per_unit')
     def _compute_bom_cost(self):
         for product in self:
-            # Chercher la nomenclature principale active
+            # Find the active main BoM
             main_bom = product.bom_ids.filtered(
                 lambda b: b.active and b.type == 'normal' and not b.product_id
-            )[:1]  # Prendre seulement la première
+            )[:1]  # Take the first one only
             product.bom_cost = main_bom.cost_per_unit if main_bom else 0.0
 
     def sync_menus(self):
@@ -61,24 +61,27 @@ class ProductTemplate(models.Model):
 
     def create(self, vals):
         if isinstance(vals, list):
-            # Filter the consu product and non consu ones
-            consu_products = [val for val in vals if val.get('type') == 'consu']
-            non_consu_products = [val for val in vals if val.get('type') != 'consu']
+            created_records = self.env['product.template']  # recordset vide
 
-            # Create only in Odoo
+            # Create storable products only in Odoo (not in MenuPro)
+            consu_products = [val for val in vals if val.get('is_storable') is True]
+            non_consu_products = [val for val in vals if val.get('is_storable') is False]
+
+            if consu_products:
+                created_records += super(ProductTemplate, self).create(consu_products)
+
             if non_consu_products:
-                return self.create_only_in_odoo(non_consu_products)
+                for product_vals in non_consu_products:
+                    self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                created_records += super(ProductTemplate, self).create(non_consu_products)
 
-            # Create in MP server and Odoo
-            for product in vals:
-                self._process_single_product(product)
-            return super(ProductTemplate, self).create(consu_products)
+            return created_records
 
-        if 'type' in vals and vals['type'] != 'consu':
-            # Create it only in Odoo app
-            return self.create_only_in_odoo(vals)
+        if vals.get('is_storable') is True:
+            # Create only in Odoo
+            return super(ProductTemplate, self).create(vals)
 
-        # Create the rest in MP server and Odoo
+        # Otherwise, create in both MenuPro and Odoo
         self._process_single_product(vals)
         return super(ProductTemplate, self).create(vals)
 
@@ -108,7 +111,7 @@ class ProductTemplate(models.Model):
     def write(self, vals):
         res = super(ProductTemplate, self).write(vals)
         for product in self:
-            if product.type != 'consu':
+            if product.is_storable is True:
                 continue
             self._create_or_update_menupro_menu(product)
 
@@ -209,9 +212,15 @@ class ProductTemplate(models.Model):
         return super(ProductTemplate, self).unlink()
 
     def prepare_data(self, product):
-        """ Prepare data payload for menuPro api call (CREATE:post or UPDATE:patch) """
+        if isinstance(product, dict):
+            list_price = product.get('list_price', 0.0)
+            name = product.get('name', '')
+            description = product.get('description', '') or ''
+        else:
+            list_price = getattr(product, 'list_price', 0.0)
+            name = getattr(product, 'name', '')
+            description = getattr(product, 'description', '') or ''
 
-        # Get restaurant infos
         api_url = tools.config.get("api_url")
         if api_url is None:
             return "There is no API_URL in Config"
@@ -227,20 +236,14 @@ class ProductTemplate(models.Model):
         response = requests.get(api_url + restaurant_id, headers={'x-secret-key': secret_key})
         if response.status_code == 200:
             restaurant = response.json()
-            name = restaurant.get('name')
+            name_restaurant = restaurant.get('name')
 
-            if 'description' in product and product['description'] is not False:
-                description = product['description']
-            else:
-                description = ''
-
-            # Prepare the data payload for menupro API
             data = {
-                'title': product['name'],
-                'price': product['list_price'],
+                'title': name,
+                'price': list_price,
                 'description': description,
-                'restaurantId': self.env['ir.config_parameter'].sudo().get_param('restaurant_id'),
-                'restaurantName': name,
+                'restaurantId': restaurant_id,
+                'restaurantName': name_restaurant,
                 'synchronizeOdoo': datetime.today().isoformat()
             }
             return data
