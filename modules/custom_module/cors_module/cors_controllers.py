@@ -14,7 +14,7 @@ class CorsController(http.Controller):
         allowed_origins = [
                                 # Local
                                 'http://localhost:3000',
-                                'http://localhost:3001'
+                                'http://localhost:3001',
                                 'http://192.168.1.158:3000',
 
                                 # BO admin

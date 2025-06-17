@@ -3,6 +3,7 @@
     'name': 'Custom Module',
     'version': '1.0',
     'installable': True,
+    'category': 'Menupro',
     'application': True,
     'depends': ['base', 'web','pos_self_order', 'point_of_sale', 'base_import', 'pos_restaurant','bus', 'pos_hr','hr', 'pos_discount','mrp'],
     'data': [
@@ -61,6 +62,7 @@
                 'custom_module/static/src/xml/point_of_sale_control_buttons_inherit.xml',
                 'custom_module/static/src/js/product_screen_inherit.js',
                 'custom_module/static/src/js/closing_popup_inherit.js',
+                'custom_module/static/src/js/error_handlers_inherit.js'
             ],
     },
     'images': [
