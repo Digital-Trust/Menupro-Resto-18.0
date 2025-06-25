@@ -360,6 +360,86 @@ patch(PosStore.prototype, {
         this.reset_cashier();
         this.showScreen("LoginScreen");
         this.dialog.closeAll();
+    },
+    async printChanges(order, orderChange) {
+        const unsuccedPrints = [];
+        const isPartOfCombo = (line) =>
+            line.isCombo || this.models["product.product"].get(line.product_id).type == "combo";
+        const comboChanges = orderChange.new.filter(isPartOfCombo);
+        const normalChanges = orderChange.new.filter((line) => !isPartOfCombo(line));
+        const comboCancelledChanges   = orderChange.cancelled.filter(isPartOfCombo);
+        const normalCancelledChanges  = orderChange.cancelled.filter(
+            (line) => !isPartOfCombo(line)
+        );
+
+        normalChanges.sort((a, b) => {
+            const sequenceA = a.pos_categ_sequence;
+            const sequenceB = b.pos_categ_sequence;
+            if (sequenceA === 0 && sequenceB === 0) {
+                return a.pos_categ_id - b.pos_categ_id;
+            }
+
+            return sequenceA - sequenceB;
+        });
+        orderChange.new = [...comboChanges, ...normalChanges];
+        normalCancelledChanges.sort((a, b) => {
+            const sequenceA = a.pos_categ_sequence;
+            const sequenceB = b.pos_categ_sequence;
+            if (sequenceA === 0 && sequenceB === 0) {
+                return a.pos_categ_id - b.pos_categ_id;
+            }
+            return sequenceA - sequenceB;
+        });
+        orderChange.cancelled = [...comboCancelledChanges, ...normalCancelledChanges];
+        console.log("orderChange.cancelled",orderChange.cancelled);
+
+        for (const printer of this.unwatched.printers) {
+            const changes = this._getPrintingCategoriesChanges(
+                printer.config.product_categories_ids,
+                orderChange
+            );
+            const anyChangesToPrint = changes.new.length || changes.cancelled.length;
+            const diningModeUpdate = orderChange.modeUpdate;
+            if (diningModeUpdate || anyChangesToPrint) {
+                if (changes.new.length) {
+                    const printed = await this.printReceipts(
+                        order, printer, "New", changes.new, true, diningModeUpdate
+                    );
+                    if (!printed) unsuccedPrints.push("New");
+                }
+                if (changes.cancelled.length) {
+                    const printed = await this.printReceipts(
+                        order, printer, "Cancelled", changes.cancelled, true, diningModeUpdate
+                    );
+                    if (!printed) unsuccedPrints.push("Cancelled");
+                }
+            } else {
+                // Print all receipts related to line changes
+                const toPrintArray = this.preparePrintingData(order, changes);
+                for (const [key, value] of Object.entries(toPrintArray)) {
+                    const printed = await this.printReceipts(order, printer, key, value, false);
+                    if (!printed) {
+                        unsuccedPrints.push(key);
+                    }
+                }
+                // Print Order Note if changed
+                if (orderChange.generalNote) {
+                    const printed = await this.printReceipts(order, printer, "Message", []);
+                    if (!printed) {
+                        unsuccedPrints.push("General Message");
+                    }
+                }
+            }
+        }
+
+        // printing errors
+        if (unsuccedPrints.length) {
+            const failedReceipts = unsuccedPrints.join(", ");
+            this.dialog.add(AlertDialog, {
+                title: _t("Printing failed"),
+                body: _t("Failed in printing %s changes of the order", failedReceipts),
+            });
+        }
     }
 
 
