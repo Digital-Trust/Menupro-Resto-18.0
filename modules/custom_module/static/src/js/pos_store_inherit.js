@@ -63,6 +63,7 @@ patch(PosStore.prototype, {
 
     getReceiptHeaderData(order) {
         const result = super.getReceiptHeaderData(...arguments);
+        console.log("result",result);
         result.ticket_number = order.ticket_number;
         return result;
     },
