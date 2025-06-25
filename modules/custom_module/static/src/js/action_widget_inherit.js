@@ -3,24 +3,36 @@
 import { patch } from "@web/core/utils/patch";
 import { ActionpadWidget } from "@point_of_sale/app/screens/product_screen/action_pad/action_pad";
 
-
 const disableInteractionOnOldOrders = (orderLines, isAdmin) => {
+    console.log("disableInteractionOnOldOrders");
     orderLines.forEach(line => {
-        if (!isAdmin && line.classList.contains("orderline") && !line.classList.contains("text-success")) {
+        // Only disable interaction for orders that have been sent to kitchen (don't have has-change class)
+        if (!isAdmin && line.classList.contains("orderline") && !line.classList.contains("text-success") && !line.classList.contains("has-change")) {
             line.classList.remove("cursor-pointer");
             line.style.pointerEvents = "none";
             line.style.userSelect = "none";
             line.style.cursor = "not-allowed";
         }
+        // Re-enable interaction for orders that haven't been sent to kitchen (have has-change class)
+        else if (line.classList.contains("orderline") && line.classList.contains("has-change")) {
+            line.style.pointerEvents = "";
+            line.style.userSelect = "";
+            line.style.cursor = "";
+            if (!line.classList.contains("cursor-pointer")) {
+                line.classList.add("cursor-pointer");
+            }
+        }
     });
 };
 
 const removeSelectedClass = () => {
+    console.log("removeSelectedClass");
     const selectedOrderLines = document.querySelectorAll(".orderline.selected");
     selectedOrderLines.forEach(el => {
         el.classList.remove("selected");
     });
 };
+
 function checkForChanges() {
     let hasOtherChanges = false;
     const orderLines = document.querySelectorAll('.order-container .orderline');
@@ -32,6 +44,7 @@ function checkForChanges() {
     }
     return hasOtherChanges;
 }
+
 patch(ActionpadWidget.prototype, {
     setup() {
         super.setup(...arguments);
@@ -39,6 +52,7 @@ patch(ActionpadWidget.prototype, {
             const pos = this.pos;
             const currentUser = pos.cashier;
             const isAdmin = currentUser._role === "admin" || currentUser._role === "manager";
+
             setTimeout(() => {
                 if (!isAdmin) {
                     if(!checkForChanges()){
@@ -49,27 +63,48 @@ patch(ActionpadWidget.prototype, {
                             console.log(' after ActionpadWidget call')
                         });
                     }
-                    const oldOrderLines = document.querySelectorAll(".orderline:not(.text-success)");
-                    disableInteractionOnOldOrders(oldOrderLines, isAdmin);
 
-                    removeSelectedClass();
+                    const allOrderLines = document.querySelectorAll(".orderline");
+                    console.log("allOrderLines", allOrderLines);
+                    disableInteractionOnOldOrders(allOrderLines, isAdmin);
+
+                    const sentOrderLines = document.querySelectorAll(".orderline:not(.has-change).selected");
+                    sentOrderLines.forEach(el => {
+                        el.classList.remove("selected");
+                    });
                 }
             }, 100);
 
-            // Observer pour surveiller les changements dans l'UI
+            // Observer to monitor UI changes
             const orderContainer = document.querySelector(".order-container");
             if (orderContainer) {
                 const observer = new MutationObserver(() => {
-                    const orderLines = document.querySelectorAll(".orderline:not(.text-success)");
-                    disableInteractionOnOldOrders(orderLines, isAdmin);
-                    if(!checkForChanges()){
-                        const numpadButtons = document.querySelectorAll(".numpad button");
-                        numpadButtons.forEach(button => {
-                            button.style.pointerEvents = "none";
-                            button.disabled = true;
+                    if (!isAdmin) {
+                        const allOrderLines = document.querySelectorAll(".orderline");
+                        disableInteractionOnOldOrders(allOrderLines, isAdmin);
+
+                        if(!checkForChanges()){
+                            const numpadButtons = document.querySelectorAll(".numpad button");
+                            numpadButtons.forEach(button => {
+                                button.style.pointerEvents = "none";
+                                button.disabled = true;
+                            });
+                        } else {
+                            // Re-enable numpad if there are changes
+                            const numpadButtons = document.querySelectorAll(".numpad button");
+                            numpadButtons.forEach(button => {
+                                button.style.pointerEvents = "";
+                                button.disabled = false;
+                            });
+                        }
+
+                        console.log("allOrderLines", allOrderLines);
+
+                        const sentOrderLines = document.querySelectorAll(".orderline:not(.has-change).selected");
+                        sentOrderLines.forEach(el => {
+                            el.classList.remove("selected");
                         });
                     }
-                    removeSelectedClass();
                 });
                 observer.observe(orderContainer, { subtree: true, childList: true });
             }
@@ -79,10 +114,9 @@ patch(ActionpadWidget.prototype, {
         }
     },
 
-
     async submitOrder() {
         const res = await super.submitOrder();
         this.pos.showScreen("FloorScreen");
-        return res
+        return res;
     },
 });
