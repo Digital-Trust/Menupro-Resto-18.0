@@ -441,7 +441,55 @@ patch(PosStore.prototype, {
                 body: _t("Failed in printing %s changes of the order", failedReceipts),
             });
         }
-    }
+    },
+    async pay() {
+        const currentOrder = this.get_order();
+        const currentCashier = this.cashier;
+        if (!currentOrder.canPay()) {
+            return;
+        }
+        if (currentOrder && currentCashier &&
+            currentOrder.employee_id?.id !== currentCashier.id) {
+            currentOrder.cashier = currentCashier.name;
+            currentOrder.employee_id = currentCashier;
+            try {
+                await this.env.services.orm.write(
+                    'pos.order',
+                    [currentOrder.id],
+                    {
+                        'cashier': currentCashier.name,
+                        'employee_id': currentCashier.id,
+                    }
+                );
+            } catch (error) {
+                console.error("Erreur lors de la mise à jour du cashier:", error);
+            }
+        }
 
+        if (
+            currentOrder.lines.some(
+                (line) => line.get_product().tracking !== "none" && !line.has_valid_product_lot()
+            ) &&
+            (this.pickingType.use_create_lots || this.pickingType.use_existing_lots)
+        ) {
+            const confirmed = await ask(this.env.services.dialog, {
+                title: _t("Some Serial/Lot Numbers are missing"),
+                body: _t(
+                    "You are trying to sell products with serial/lot numbers, but some of them are not set.\nWould you like to proceed anyway?"
+                ),
+            });
+            if (confirmed) {
+                this.mobile_pane = "right";
+                this.env.services.pos.showScreen("PaymentScreen", {
+                    orderUuid: this.selectedOrderUuid,
+                });
+            }
+        } else {
+            this.mobile_pane = "right";
+            this.env.services.pos.showScreen("PaymentScreen", {
+                orderUuid: this.selectedOrderUuid,
+            });
+        }
+    }
 
 });
