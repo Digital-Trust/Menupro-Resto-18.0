@@ -14,8 +14,6 @@ class ProductTemplateAttributeValue(models.Model):
     def create(self, vals_list):
         _logger.info("Création product.template.attribute.value: %s", vals_list)
         res = super().create(vals_list)
-        print("ressssss====>",res)
-
         restaurant_id = self.env['ir.config_parameter'].sudo().get_param('restaurant_id')
         if not restaurant_id:
             raise UserError("Le paramètre restaurant_id est manquant dans la config.")
@@ -42,7 +40,6 @@ class ProductTemplateAttributeValue(models.Model):
                     timeout=10
                 )
                 response.raise_for_status()
-                print("response ================+>",response)
                 data = response.json()
                 record.menuproId = data.get('_id')
                 _logger.info(f"Sync réussie product.template.attribute.value {record.id}")

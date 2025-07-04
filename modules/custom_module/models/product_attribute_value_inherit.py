@@ -13,7 +13,7 @@ class ProductAttributeValue(models.Model):
     def _get_config(self):
         """Charge et valide la config une seule fois par thread."""
         if hasattr(self.env, "_mp_config"):
-            return self.env._mp_config   # cache
+            return self.env._mp_config
 
         ICParam = self.env['ir.config_parameter'].sudo()
 
@@ -29,7 +29,7 @@ class ProductAttributeValue(models.Model):
                 _logger.error("%s is missing in config", k)
                 raise UserError(f"L’option '{k}' est manquante dans la configuration.")
 
-        self.env._mp_config = cfg        # mise en cache
+        self.env._mp_config = cfg
         _logger.info("\033[92mMenuPro config OK\033[0m")
         return cfg
 

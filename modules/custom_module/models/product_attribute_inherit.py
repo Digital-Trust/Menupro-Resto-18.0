@@ -14,7 +14,7 @@ class ProductAttribute(models.Model):
     def _get_config(self):
         """Charge et valide la config une seule fois par thread."""
         if hasattr(self.env, "_mp_config"):
-            return self.env._mp_config   # cache
+            return self.env._mp_config
 
         ICParam = self.env['ir.config_parameter'].sudo()
 
@@ -30,7 +30,7 @@ class ProductAttribute(models.Model):
                 _logger.error("%s is missing in config", k)
                 raise UserError(f"L’option '{k}' est manquante dans la configuration.")
 
-        self.env._mp_config = cfg        # mise en cache
+        self.env._mp_config = cfg
         _logger.info("\033[92mMenuPro config OK\033[0m")
         return cfg
 
@@ -93,7 +93,6 @@ class ProductAttribute(models.Model):
         return records
 
     def write(self, vals):
-        print("write here tooo", vals)
         res = super().write(vals)
         cfg = self._get_config()
         base = cfg['attributs_url']
@@ -101,16 +100,10 @@ class ProductAttribute(models.Model):
         for rec in self:
             if not rec.menuproId:
                 continue
-
-            # 1. Envoi du payload vers MenuPro
             payload = rec._build_payload()
             response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
-            print("response =======++>",response)
-
-            # 2. Récupérer les `_id` des valeurs synchronisées
             if response and "values" in response:
                 vmap = {v["odoo_id"]: v["_id"] for v in response["values"]}
-                print("vmap",vmap)
                 for val in rec.value_ids:
                     if not val.menuproId and val.id in vmap:
                         val.menuproId = vmap[val.id]
@@ -122,7 +115,6 @@ class ProductAttribute(models.Model):
         cfg = self._get_config()
         base = cfg['attributs_url']
         res = super()._unlink_except_used_on_product()
-        print("heree too ")
         for rec in self:
             if rec.menuproId:
                 rec._call_mp("DELETE", f"{base}/{rec.menuproId}")
