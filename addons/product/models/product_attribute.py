@@ -135,6 +135,7 @@ class ProductAttribute(models.Model):
     @api.ondelete(at_uninstall=False)
     def _unlink_except_used_on_product(self):
         for pa in self:
+            print("pa",pa)
             if pa.number_related_products:
                 raise UserError(_(
                     "You cannot delete the attribute %(attribute)s because it is used on the"
