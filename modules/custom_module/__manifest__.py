@@ -11,7 +11,7 @@
          'views/login_layout.xml',
         # Category module
         'views/categories/list_pos_category.xml',
-        #'views/categories/upsert_pos_category.xml',
+        'views/categories/upsert_pos_category.xml',
         # Menus module
         'views/menus/list_menu.xml',
         'views/point_of_sale_dashboard_inherit.xml',
