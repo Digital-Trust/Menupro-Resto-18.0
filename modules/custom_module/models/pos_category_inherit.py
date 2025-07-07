@@ -55,39 +55,44 @@ class PosCategory(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        if 'option_name' in vals_list:
-            print("vals_list['option_name']", vals_list['option_name'])
-            base_s3_url = tools.config.get('base_s3_url', '')
-            category_data = self._fetch_category_data_by_id(vals_list['option_name'])
-            category_picture = False
-            if 'picture' in category_data:
-                category_picture = image_utils.get_image_as_base64(base_s3_url + category_data['picture'])
-
-            if category_data:
-                vals_list.update({
-                    'name': category_data['menuProName'],
-                    'menupro_id': category_data['_id'],
-                    'picture': base_s3_url + category_data.get('picture', ''),
-                    'image_128': category_picture,
-                    'type_name': category_data.get('typeName', ''),
-                })
-        return super(PosCategory, self).create(vals_list)
+        base_s3_url = tools.config.get('base_s3_url', '')
+        for vals in vals_list:  # ← on boucle
+            option = vals.get('option_name')
+            if option:
+                data = self._fetch_category_data_by_id(option)
+                if data:
+                    # Image en base64 si dispo
+                    img128 = None
+                    if data.get('picture'):
+                        img128 = image_utils.get_image_as_base64(
+                            f"{base_s3_url}{data['picture']}"
+                        )
+                    # Enrichir les valeurs avant le super()
+                    vals.update({
+                        'name': data.get('menuProName', ''),
+                        'menupro_id': data.get('_id'),
+                        'picture': f"{base_s3_url}{data.get('picture', '')}",
+                        'image_128': img128,
+                        'type_name': data.get('typeName', ''),
+                    })
+        return super().create(vals_list)
 
     def write(self, vals):
-        if 'option_name' in vals:
-            category_data = self._fetch_category_data_by_id(vals['option_name'])
-
-            category_picture = False
-            if 'picture' in category_data:
-                base_s3_url = tools.config.get('base_s3_url')
-                category_picture = image_utils.get_image_as_base64(base_s3_url + category_data['picture'])
-
-            if category_data:
+        option = vals.get('option_name')
+        if option:
+            base_s3_url = tools.config.get('base_s3_url', '')
+            data = self._fetch_category_data_by_id(option)
+            if data:
+                img128 = None
+                if data.get('picture'):
+                    img128 = image_utils.get_image_as_base64(
+                        f"{base_s3_url}{data['picture']}"
+                    )
                 vals.update({
-                    'name': category_data['menuProName'],
-                    'menupro_id': category_data['_id'],
-                    'picture': category_data.get('picture', ''),
-                    'image_128': category_picture,
-                    'type_name': category_data.get('typeName', ''),
+                    'name': data.get('menuProName', ''),
+                    'menupro_id': data.get('_id'),
+                    'picture': f"{base_s3_url}{data.get('picture','')}",
+                    'image_128': img128,
+                    'type_name': data.get('typeName', ''),
                 })
-        return super(PosCategory, self).write(vals)
+        return super().write(vals)
