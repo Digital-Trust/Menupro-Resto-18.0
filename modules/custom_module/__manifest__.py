@@ -63,7 +63,6 @@
                 'custom_module/static/src/js/product_screen_inherit.js',
                 'custom_module/static/src/js/closing_popup_inherit.js',
                 'custom_module/static/src/js/error_handlers_inherit.js',
-                'custom_module/static/src/js/navbar_inherit.js',
                 'custom_module/static/src/js/order_tabs_inherit.js'
             ],
     },

@@ -63,6 +63,7 @@ patch(PosStore.prototype, {
 
     getReceiptHeaderData(order) {
         const result = super.getReceiptHeaderData(...arguments);
+        console.log("result",result);
         result.ticket_number = order.ticket_number;
         return result;
     },
@@ -360,7 +361,135 @@ patch(PosStore.prototype, {
         this.reset_cashier();
         this.showScreen("LoginScreen");
         this.dialog.closeAll();
-    }
+    },
+    async printChanges(order, orderChange) {
+        const unsuccedPrints = [];
+        const isPartOfCombo = (line) =>
+            line.isCombo || this.models["product.product"].get(line.product_id).type == "combo";
+        const comboChanges = orderChange.new.filter(isPartOfCombo);
+        const normalChanges = orderChange.new.filter((line) => !isPartOfCombo(line));
+        const comboCancelledChanges   = orderChange.cancelled.filter(isPartOfCombo);
+        const normalCancelledChanges  = orderChange.cancelled.filter(
+            (line) => !isPartOfCombo(line)
+        );
 
+        normalChanges.sort((a, b) => {
+            const sequenceA = a.pos_categ_sequence;
+            const sequenceB = b.pos_categ_sequence;
+            if (sequenceA === 0 && sequenceB === 0) {
+                return a.pos_categ_id - b.pos_categ_id;
+            }
+
+            return sequenceA - sequenceB;
+        });
+        orderChange.new = [...comboChanges, ...normalChanges];
+        normalCancelledChanges.sort((a, b) => {
+            const sequenceA = a.pos_categ_sequence;
+            const sequenceB = b.pos_categ_sequence;
+            if (sequenceA === 0 && sequenceB === 0) {
+                return a.pos_categ_id - b.pos_categ_id;
+            }
+            return sequenceA - sequenceB;
+        });
+        orderChange.cancelled = [...comboCancelledChanges, ...normalCancelledChanges];
+        console.log("orderChange.cancelled",orderChange.cancelled);
+
+        for (const printer of this.unwatched.printers) {
+            const changes = this._getPrintingCategoriesChanges(
+                printer.config.product_categories_ids,
+                orderChange
+            );
+            const anyChangesToPrint = changes.new.length || changes.cancelled.length;
+            const diningModeUpdate = orderChange.modeUpdate;
+            if (diningModeUpdate || anyChangesToPrint) {
+                if (changes.new.length) {
+                    const printed = await this.printReceipts(
+                        order, printer, "New", changes.new, true, diningModeUpdate
+                    );
+                    if (!printed) unsuccedPrints.push("New");
+                }
+                if (changes.cancelled.length) {
+                    const printed = await this.printReceipts(
+                        order, printer, "Cancelled", changes.cancelled, true, diningModeUpdate
+                    );
+                    if (!printed) unsuccedPrints.push("Cancelled");
+                }
+            } else {
+                // Print all receipts related to line changes
+                const toPrintArray = this.preparePrintingData(order, changes);
+                for (const [key, value] of Object.entries(toPrintArray)) {
+                    const printed = await this.printReceipts(order, printer, key, value, false);
+                    if (!printed) {
+                        unsuccedPrints.push(key);
+                    }
+                }
+                // Print Order Note if changed
+                if (orderChange.generalNote) {
+                    const printed = await this.printReceipts(order, printer, "Message", []);
+                    if (!printed) {
+                        unsuccedPrints.push("General Message");
+                    }
+                }
+            }
+        }
+
+        // printing errors
+        if (unsuccedPrints.length) {
+            const failedReceipts = unsuccedPrints.join(", ");
+            this.dialog.add(AlertDialog, {
+                title: _t("Printing failed"),
+                body: _t("Failed in printing %s changes of the order", failedReceipts),
+            });
+        }
+    },
+    async pay() {
+        const currentOrder = this.get_order();
+        const currentCashier = this.cashier;
+        if (!currentOrder.canPay()) {
+            return;
+        }
+        if (currentOrder && currentCashier &&
+            currentOrder.employee_id?.id !== currentCashier.id) {
+            currentOrder.cashier = currentCashier.name;
+            currentOrder.employee_id = currentCashier;
+            try {
+                await this.env.services.orm.write(
+                    'pos.order',
+                    [currentOrder.id],
+                    {
+                        'cashier': currentCashier.name,
+                        'employee_id': currentCashier.id,
+                    }
+                );
+            } catch (error) {
+                console.error("Erreur lors de la mise à jour du cashier:", error);
+            }
+        }
+
+        if (
+            currentOrder.lines.some(
+                (line) => line.get_product().tracking !== "none" && !line.has_valid_product_lot()
+            ) &&
+            (this.pickingType.use_create_lots || this.pickingType.use_existing_lots)
+        ) {
+            const confirmed = await ask(this.env.services.dialog, {
+                title: _t("Some Serial/Lot Numbers are missing"),
+                body: _t(
+                    "You are trying to sell products with serial/lot numbers, but some of them are not set.\nWould you like to proceed anyway?"
+                ),
+            });
+            if (confirmed) {
+                this.mobile_pane = "right";
+                this.env.services.pos.showScreen("PaymentScreen", {
+                    orderUuid: this.selectedOrderUuid,
+                });
+            }
+        } else {
+            this.mobile_pane = "right";
+            this.env.services.pos.showScreen("PaymentScreen", {
+                orderUuid: this.selectedOrderUuid,
+            });
+        }
+    }
 
 });
