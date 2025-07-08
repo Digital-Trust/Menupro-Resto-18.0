@@ -89,10 +89,10 @@ class PosCategory(models.Model):
                         f"{base_s3_url}{data['picture']}"
                     )
                 vals.update({
-                    'name'      : data.get('menuProName', ''),
+                    'name': data.get('menuProName', ''),
                     'menupro_id': data.get('_id'),
-                    'picture'   : f"{base_s3_url}{data.get('picture','')}",
-                    'image_128' : img128,
-                    'type_name' : data.get('typeName', ''),
+                    'picture': f"{base_s3_url}{data.get('picture','')}",
+                    'image_128': img128,
+                    'type_name': data.get('typeName', ''),
                 })
         return super().write(vals)

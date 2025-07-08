@@ -118,8 +118,8 @@ class MenuSyncController(http.Controller):
         for menu_data in created_menus:
             self._create_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url)
 
-        for menu_data in updated_menus:
-            self._update_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url)
+        # for menu_data in updated_menus:
+        #    self._update_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url)
 
         for menu_id in deleted_menus:
             self._deactivate_menu(menu_id, pos_menus_model)
