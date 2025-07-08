@@ -118,12 +118,10 @@ class ProductAttributeValue(models.Model):
 
     @api.ondelete(at_uninstall=False)
     def _unlink_except_used_on_product(self):
-        print("hereeeeeeeeeeeeeeee1")
         if is_used_on_products := self.check_is_used_on_products():
             raise UserError(is_used_on_products)
 
     def unlink(self):
-        print("hereeeeeeeeeee 2")
         pavs_to_archive = self.env['product.attribute.value']
         for pav in self:
             linked_products = pav.env['product.template.attribute.value'].search(
