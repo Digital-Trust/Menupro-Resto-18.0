@@ -33,10 +33,10 @@ class PosOrder(models.Model):
     def _sync_reservation(self, order):
         odoo_secret_key = tools.config.get("odoo_secret_key")
         table_id = order.get('table_id')
-        print("order table", table_id)
+        # print("order table", table_id)
 
         restaurant_table = self.env['restaurant.table'].search([('id', '=', table_id)])
-        print("restaurant_table", restaurant_table)
+        # print("restaurant_table", restaurant_table)
 
         if restaurant_table:
             menupro_id = restaurant_table.menupro_id
@@ -76,11 +76,11 @@ class PosOrder(models.Model):
 
         headers = {'x-odoo-key': odoo_secret_key}
         payload = self._prepare_api_payload(order, restaurant_id)
-        # print("Payload to be sent to our server =>", payload)
+        print("Payload to be sent to our server =>", payload)
 
         try:
             response = requests.patch(api_url, json=payload, headers=headers)
-            # print('response of finance =>', response.text)
+            print('response of finance =>', response.text)
         except Exception as e:
             _logger.error("Error API: %s", str(e))
             raise
@@ -140,6 +140,7 @@ class PosOrder(models.Model):
                     "customer_count": order_data.get('customer_count', 1),
                     "booked": True,
                     "employee_id": order_data.get('employee_id'),
+                    "takeaway": order_data.get('takeaway'),
                     "menupro_id": order_data.get('menupro_id', False),
                     "status": "validate",
                     "menupro_fee": 0.5,
@@ -185,6 +186,7 @@ class PosOrder(models.Model):
                     "is_total_cost_computed": line.is_total_cost_computed,
                     "is_edited": line.is_edited,
                     "price_extra": line.price_extra,
+                    "attribute_value_ids":line.attribute_value_ids.ids,
                     "is_sent_to_kitchen": line.uuid in kitchen_lines,
                 }
                 payload['order']['lines'].append(line_data)
