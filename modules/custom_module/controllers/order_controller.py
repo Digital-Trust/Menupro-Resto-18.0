@@ -17,6 +17,10 @@ def json_default(obj):
         return obj.decode('utf-8')
     raise TypeError(f"Type {type(obj)} not serializable")
 
+def same_attributes(line_attrs, incoming_attrs):
+    return set(line_attrs.ids) == set(incoming_attrs or [])
+
+
 
 class OrderController(PosSelfOrderController):
 
@@ -36,6 +40,8 @@ class OrderController(PosSelfOrderController):
             table_identifier = data.get('table_identifier')
             access_token = data.get('access_token')
             device_type = data.get('device_type', 'mobile')
+            takeaway = order_data.get('takeaway')
+
 
             if not all([pos_config_id, table_identifier, access_token]):
                 return http.Response(json.dumps({"error": "Missing required parameters"}),
@@ -75,78 +81,102 @@ class OrderController(PosSelfOrderController):
 
                 qty = line.get('qty', 1)
                 note = line.get('note', '')
-                menupro_id = line.get('menupro_id')
+                attribute_value_ids = line.get('attribute_value_ids', [])
+                custom_attribute_value_ids = line.get('custom_attribute_value_ids', [])
+                price_extra = line.get('price_extra', 0.0)
+                price_unit = product.lst_price + price_extra
 
                 # Calcul des taxes
                 taxes_res = product.taxes_id.compute_all(
-                    product.lst_price,
+                    price_unit,
                     currency=pos_config.pricelist_id.currency_id,
                     quantity=qty,
                     product=product
                 )
 
                 line_uuid = str(uuid.uuid4())
-
-                # Format pour synchronisation
+                attribute_value_ids_clean = [aid for aid in attribute_value_ids if
+                                             request.env['product.template.attribute.value'].sudo().browse(aid).exists()]
+                attribute_names = request.env['product.template.attribute.value'].sudo().browse(
+                    attribute_value_ids_clean).mapped('name')
+                full_product_name = f"{product.name} ({', '.join(attribute_names)})" if attribute_names else product.name
                 line_dict = {
                     'product_id': product.id,
                     'qty': qty,
-                    'price_unit': product.lst_price,
+                    'price_unit': price_unit,
                     'price_subtotal': taxes_res['total_excluded'],
                     'price_subtotal_incl': taxes_res['total_included'],
                     'tax_ids': product.taxes_id.ids,
                     'note': note,
                     'uuid': line_uuid,
+                    'attribute_value_ids': attribute_value_ids,
+                    'custom_attribute_value_ids': custom_attribute_value_ids,
+                    'price_extra': price_extra,
+                    'full_product_name': full_product_name,
                 }
 
                 # Si commande existante, vérifier si le produit est déjà présent
                 if existing_order:
-                    # Chercher une ligne existante avec le même produit et même note
+                    # Chercher une ligne existante avec le même produit, même note et meme attribute
                     existing_line = None
                     for ol in existing_order.lines:
-                        if ol.product_id.id == product.id and ol.note == note:
+                        if (
+                                ol.product_id.id == product.id and
+                                (ol.note or '') == (note or '') and
+                                same_attributes(ol.attribute_value_ids, attribute_value_ids)
+                        ):
                             existing_line = ol
                             break
-
+                    print("existing line",existing_line)
                     if existing_line:
                         # Mise à jour de la quantité
                         new_qty = existing_line.qty + qty
-                        line_dict['id'] = existing_line.id
-                        line_dict['qty'] = new_qty
-                        line_dict['price_subtotal'] = existing_line.price_unit * new_qty
-                        line_dict['price_subtotal_incl'] = existing_line.price_unit * new_qty * (
-                                    1 + existing_line.tax_ids.amount / 100)
-
-                        # Ajouter l'opération de mise à jour
+                        updated_taxes = existing_line.tax_ids.compute_all(
+                            existing_line.price_unit,
+                            currency=pos_config.currency_id,
+                            quantity=new_qty,
+                            product=existing_line.product_id,
+                        )
+                        line_dict.update({
+                            'id': existing_line.id,
+                            'qty': new_qty,
+                            'price_subtotal': updated_taxes['total_excluded'],
+                            'price_subtotal_incl': updated_taxes['total_included'],
+                        })
                         line_operations.append((1, existing_line.id, {
                             'qty': new_qty,
-                            'price_subtotal': line_dict['price_subtotal'],
-                            'price_subtotal_incl': line_dict['price_subtotal_incl'],
+                            'price_subtotal': updated_taxes['total_excluded'],
+                            'price_subtotal_incl': updated_taxes['total_included'],
                         }))
                     else:
-                        # Nouvelle ligne
-                        line_dict['id'] = False
                         line_operations.append((0, 0, {
                             'product_id': product.id,
                             'qty': qty,
                             'note': note,
-                            'price_unit': product.lst_price,
+                            'price_unit': price_unit,
                             'price_subtotal': taxes_res['total_excluded'],
                             'price_subtotal_incl': taxes_res['total_included'],
                             'tax_ids': [(6, 0, product.taxes_id.ids)],
                             'uuid': line_uuid,
+                            'attribute_value_ids': [(6, 0, attribute_value_ids)],
+                            'custom_attribute_value_ids': [(6, 0, custom_attribute_value_ids)],
+                            'price_extra': price_extra,
+                            'full_product_name': full_product_name,
                         }))
                 else:
-                    # Nouvelle commande
                     line_operations.append((0, 0, {
                         'product_id': product.id,
                         'qty': qty,
                         'note': note,
-                        'price_unit': product.lst_price,
+                        'price_unit': price_unit,
                         'price_subtotal': taxes_res['total_excluded'],
                         'price_subtotal_incl': taxes_res['total_included'],
                         'tax_ids': [(6, 0, product.taxes_id.ids)],
                         'uuid': line_uuid,
+                        'attribute_value_ids': [(6, 0, attribute_value_ids)],
+                        'custom_attribute_value_ids': [(6, 0, custom_attribute_value_ids)],
+                        'price_extra': price_extra,
+                        'full_product_name': full_product_name,
                     }))
 
                 line_dicts.append(line_dict)
@@ -184,7 +214,7 @@ class OrderController(PosSelfOrderController):
                     'uuid': existing_order.uuid,
                     'table_id': restaurant_table.id,
                     'state': 'draft',
-                    'takeaway': existing_order.takeaway,
+                    'takeaway': takeaway,
                     'sequence_number': existing_order.sequence_number,
                     # Format spécial pour les lignes - toutes les lignes existantes
                     'lines': [[
@@ -199,19 +229,16 @@ class OrderController(PosSelfOrderController):
                             'tax_ids': line.tax_ids.ids,
                             'note': line.note or '',
                             'uuid': line.uuid,
+                            'attribute_value_ids': line.attribute_value_ids.ids,
+                            'custom_attribute_value_ids': line.custom_attribute_value_ids.ids,
                         }
                     ] for line in existing_order.lines]
                 }
 
-                # Synchroniser avec le POS
-                result = request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
+                request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
 
                 return http.Response(
-                    json.dumps({
-                        "success": True,
-                        "order_id": existing_order.id,
-                        "message": "Order updated successfully"
-                    }),
+                    json.dumps({"success": True, "order_id": existing_order.id, "message": "Order updated successfully"}),
                     content_type='application/json',
                     status=200
                 )
@@ -227,14 +254,13 @@ class OrderController(PosSelfOrderController):
                     'lines': line_operations,
                     'access_token': access_token,
                     'amount_total': sum(line[2]['price_subtotal_incl'] for line in line_operations),
-                    'amount_tax': sum(
-                        line[2]['price_subtotal_incl'] - line[2]['price_subtotal'] for line in line_operations),
+                    'amount_tax': sum(line[2]['price_subtotal_incl'] - line[2]['price_subtotal'] for line in line_operations),
                     'amount_paid': 0.0,
                     'amount_return': 0.0,
                     'uuid': str(uuid.uuid4()),
                     'table_id': restaurant_table.id,
                     'state': 'draft',
-                    'takeaway': False,
+                    'takeaway': takeaway,
                     'sequence_number': None,
                 }
 
@@ -247,5 +273,4 @@ class OrderController(PosSelfOrderController):
 
         except Exception as e:
             _logger.exception("Error processing mobile order: %s", str(e))
-            return http.Response(json.dumps({"error": str(e)}),
-                                 content_type='application/json', status=500)
+            return http.Response(json.dumps({"error": str(e)}), content_type='application/json', status=500)
