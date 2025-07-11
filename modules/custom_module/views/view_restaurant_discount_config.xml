@@ -1,0 +1,83 @@
+<odoo>
+    <record id="view_restaurant_discount_config_form" model="ir.ui.view">
+        <field name="name">restaurant.discount.config.form</field>
+        <field name="model">restaurant.discount.config</field>
+        <field name="arch" type="xml">
+            <form string="Configuration Remise QR">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="discount_name" placeholder="Nom de la remise..."/>
+                        </h1>
+                    </div>
+                    <group>
+                        <field name="restaurant_id" readonly="1"/>
+                        <field name="discount_code" required="1"/>
+                        <field name="enabled"/>
+                        <field name="discount_percentage"/>
+                        <field name="min_amount"/>
+                            <field name="max_discount" help="Laisser vide pour pas de plafond"/>
+
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_restaurant_discount_config_tree" model="ir.ui.view">
+        <field name="name">restaurant.discount.config.tree</field>
+        <field name="model">restaurant.discount.config</field>
+        <field name="arch" type="xml">
+            <list string="Configurations de Remises">
+                <field name="restaurant_id"/>
+                <field name="discount_code"/>
+                <field name="discount_name"/>
+                <field name="enabled" widget="boolean_toggle"/>
+                <field name="discount_percentage" string="Remise (%)"/>
+                <field name="min_amount" string="Montant min"/>
+                <field name="max_discount" string="Plafond"/>
+            </list>
+
+        </field>
+    </record>
+
+    <record id="view_restaurant_discount_config_search" model="ir.ui.view">
+        <field name="name">restaurant.discount.config.search</field>
+        <field name="model">restaurant.discount.config</field>
+        <field name="arch" type="xml">
+            <search string="Recherche Configuration Remise">
+                <field name="discount_name"/>
+                <field name="restaurant_id"/>
+                <filter name="enabled" string="Activées" domain="[('enabled', '=', True)]"/>
+                <filter name="disabled" string="Désactivées" domain="[('enabled', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_restaurant_discount_config" model="ir.actions.act_window">
+        <field name="name">Configuration Remise QR Mobile</field>
+        <field name="res_model">restaurant.discount.config</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'default_enabled': True}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Créer une configuration de remise QR Mobile
+            </p>
+            <p>
+                Configurez les remises automatiques pour les commandes passées via QR Mobile.
+                Le restaurant ID est automatiquement récupéré depuis les paramètres système.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_restaurant_discount_root"
+              name="Remises QR Mobile"
+              parent="point_of_sale.menu_point_root"
+              sequence="50"/>
+
+    <menuitem id="menu_restaurant_discount_config"
+              name="Configuration"
+              action="action_restaurant_discount_config"
+              parent="menu_restaurant_discount_root"
+              sequence="10"/>
+</odoo>

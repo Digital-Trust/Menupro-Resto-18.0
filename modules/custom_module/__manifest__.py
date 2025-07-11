@@ -25,6 +25,7 @@
         'views/stock/product_template_stock.xml',
         'views/stock/stock_picking_views_inherit.xml',
         'views/stock/mrp_bom_views_inherit.xml',
+        'views/view_restaurant_discount_config.xml',
     ],
     'assets': {
             'web.assets_backend': [

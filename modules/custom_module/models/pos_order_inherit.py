@@ -55,7 +55,6 @@ class PosOrder(models.Model):
                         headers={'x-odoo-key': odoo_secret_key}
                     )
                     response.raise_for_status()
-                    print("response", response)
                 except requests.RequestException as e:
                     print(f"API request failed for {menupro_id}: {e}")
             else:
@@ -76,11 +75,11 @@ class PosOrder(models.Model):
 
         headers = {'x-odoo-key': odoo_secret_key}
         payload = self._prepare_api_payload(order, restaurant_id)
-        print("Payload to be sent to our server =>", payload)
+        # print("Payload to be sent to our server =>", payload)
 
         try:
             response = requests.patch(api_url, json=payload, headers=headers)
-            print('response of finance =>', response.text)
+            # print('response of finance =>', response.text)
         except Exception as e:
             _logger.error("Error API: %s", str(e))
             raise
