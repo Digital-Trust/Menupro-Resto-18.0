@@ -17,6 +17,5 @@ from . import mrp_bom_inherit
 from . import product_attribute_inherit
 from . import product_template_attribute_value_inherit
 from . import product_attribute_value_inherit
-from . import product_template_attribute_exclusion_inherit
 from . import product_template_attribute_line_inherit
 from .  import restaurant_discount_config
