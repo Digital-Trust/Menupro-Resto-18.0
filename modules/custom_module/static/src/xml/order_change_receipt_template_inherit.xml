@@ -54,8 +54,10 @@
                                             </p>
                                         </t>
                                     </div>
-                                    <div t-if="line.note" t-attf-class="fst-italic #{operational_title and operational_title.toLowerCase().includes('cancel') ? 'text-decoration-line-through' : ''}" style="font-size: 91%;">
-                                        <t t-esc="line.note.split('\n').join(', ')"/><br/>
+                                    <div t-if="line.note"
+                                         t-attf-class="fst-italic #{operational_title and operational_title.toLowerCase().includes('cancel') ? 'text-decoration-line-through' : ''}"
+                                         style="font-size: 95%; font-weight: bold; text-decoration: underline;">
+                                        Note : <t t-esc="line.note.split('\n').join(', ')"/><br/>
                                     </div>
                                 </div>
                             </div>
