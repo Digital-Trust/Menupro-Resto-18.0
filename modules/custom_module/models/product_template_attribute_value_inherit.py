@@ -68,12 +68,17 @@ class ProductTemplateAttributeValue(models.Model):
         base = f"{cfg['attributs_url']}/template-values"
 
         for rec in self:
-            if rec.menuproId:
-                try:
-                    payload = rec._build_payload()
+            try:
+                payload = rec._build_payload()
+
+                if rec.menuproId:
                     rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
-                except Exception as e:
-                    _logger.error(f"Erreur lors de la mise à jour de la valeur template: {e}")
+                else:
+                    response = rec._call_mp("POST", base, payload)
+                    rec.menuproId = response.get("_id")
+
+            except Exception as e:
+                _logger.error(f"Erreur lors de la sync de la valeur template: {e}")
 
         return res
 

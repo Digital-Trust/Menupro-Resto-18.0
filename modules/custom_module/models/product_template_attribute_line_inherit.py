@@ -66,21 +66,29 @@ class ProductTemplateAttributeLine(models.Model):
         base = f"{cfg['attributs_url']}/product-template-lines"
 
         for rec in self:
-            if not rec.menuproId:
-                continue
             try:
-
                 payload = rec._build_payload()
-                response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
+
+                if rec.menuproId:
+                    response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
+                else:
+                    response = rec._call_mp("POST", base, payload)
+                    rec.menuproId = response.get("_id")
 
                 if response and "values" in response:
                     vmap = {v["odoo_id"]: v["_id"] for v in response["values"]}
-                    for ptav in rec.product_template_attribute_value_ids:
+
+                    # 🛠️ Corrigé : on va chercher les PTAV liés manuellement
+                    ptav_records = self.env['product.template.attribute.value'].search(
+                        [('attribute_line_id', '=', rec.id)])
+
+                    for ptav in ptav_records:
                         if not ptav.menuproId and ptav.id in vmap:
                             ptav.menuproId = vmap[ptav.id]
 
+
             except Exception as e:
-                _logger.error(f"Erreur lors de la mise à jour de la ligne d'attribut: {e}")
+                _logger.error(f"Erreur lors de la sync de la ligne d'attribut: {e}")
 
         return res
 

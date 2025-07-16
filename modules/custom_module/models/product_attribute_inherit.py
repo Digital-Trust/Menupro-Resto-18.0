@@ -98,10 +98,15 @@ class ProductAttribute(models.Model):
         base = cfg['attributs_url']
 
         for rec in self:
-            if not rec.menuproId:
-                continue
             payload = rec._build_payload()
-            response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
+
+            if not rec.menuproId:
+                response = rec._call_mp("POST", base, payload)
+                rec.menuproId = response.get("_id")
+            else:
+                response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
+
+            # On map les valeurs si la réponse contient des values
             if response and "values" in response:
                 vmap = {v["odoo_id"]: v["_id"] for v in response["values"]}
                 for val in rec.value_ids:
