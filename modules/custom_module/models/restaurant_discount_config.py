@@ -1,4 +1,5 @@
 import logging
+import re
 
 import requests
 
@@ -111,19 +112,25 @@ class RestaurantDiscountConfig(models.Model):
     def write(self, vals):
         if 'restaurant_id' in vals:
             del vals['restaurant_id']
+
         res = super().write(vals)
 
         cfg = self._get_config()
         base = cfg['restaurant-discount_url']
 
-        for rec in self:
-            if not rec.menupro_id:
-                continue
-            try:
+        try:
+            for rec in self:
                 payload = rec._build_payload()
-                rec._call_mp("PATCH", f"{base}/{rec.menupro_id}", payload)
-            except Exception as e:
-                _logger.error("Failed to sync discount config %s with MenuPro: %s", rec.id, e)
+
+                if not rec.menupro_id:
+                    response = rec._call_mp("POST", base, payload)
+                    rec.menupro_id = response.get("_id")
+                else:
+                    rec._call_mp("PATCH", f"{base}/{rec.menupro_id}", payload)
+
+        except Exception as e:
+            _logger.error("Failed to sync discount config %s with MenuPro: %s", rec.id, e)
+
         return res
 
     @api.model
@@ -217,3 +224,12 @@ class RestaurantDiscountConfig(models.Model):
                     _logger.info("Successfully deleted discount config %s from MenuPro", rec.menupro_id)
                 except Exception as e:
                     _logger.error("Failed to delete discount config %s from MenuPro: %s", rec.menupro_id, e)
+
+
+    @api.constrains('discount_name')
+    def _check_discount_name_contains_remise(self):
+        for record in self:
+            if not record.discount_name:
+                raise ValidationError("Le nom de la remise ne peut pas être vide.")
+            if not re.search(r'\bremise\b', record.discount_name, re.IGNORECASE):
+                raise ValidationError("Le nom de la remise doit contenir le mot 'Remise'.")
