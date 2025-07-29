@@ -17,9 +17,9 @@
                 <attribute name="invisible">1</attribute>
             </field>
 
-            <field name="parent_id" position="attributes">
-                <attribute name="invisible">1</attribute>
-            </field>
+<!--            <field name="parent_id" position="attributes">-->
+<!--                <attribute name="invisible">1</attribute>-->
+<!--            </field>-->
 
             <field name="image_128" position="attributes">
                 <attribute name="invisible">1</attribute>
