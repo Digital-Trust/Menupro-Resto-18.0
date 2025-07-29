@@ -103,8 +103,8 @@ class ProductTemplate(models.Model):
         vals['menupro_id'] = menupro_id
 
         # Upload image if present
-        if 'image_1920' in vals and vals["image_1920"]:
-            self._upload_image_to_menupro(vals, menupro_id)
+        # if 'image_1920' in vals and vals["image_1920"]:
+        # self._upload_image_to_menupro(vals, menupro_id)
         _logger.info('\033[92mSuccessfully created menu in MenuPro\033[0m')
         return {"status_code": status_code, "response_data": response_data}
 
@@ -116,10 +116,10 @@ class ProductTemplate(models.Model):
             self._create_or_update_menupro_menu(product)
 
         # If image_1920 is updated, upload the new image to S3 and update MenuPro
-        if 'image_1920' in vals and vals["image_1920"]:
-            for product in self:
-                if product.menupro_id:
-                    self._upload_image_to_menupro(vals, product.menupro_id)
+        # if 'image_1920' in vals and vals["image_1920"]:
+        # for product in self:
+        # if product.menupro_id:
+        # self._upload_image_to_menupro(vals, product.menupro_id)
         _logger.info(f'\033[92mSuccessfully updated the menu with vals {vals} in MenuPro and Odoo Servers\033[0m')  # Green
         return res
 
@@ -180,8 +180,8 @@ class ProductTemplate(models.Model):
             self.upload_image_to_s3(image_decoded, image_type, response_image['signedurl'], odoo_secret_key )
 
             # Store picture key
-
             data = {'menu_id': menupro_id, 'picture': response_image['key']}
+
             response_store = requests.post(store_picture_url, json=data,  headers={'x-odoo-key': odoo_secret_key})
             response_store.raise_for_status()
             _logger.info(f"\033[94mPicture uploaded successfully {response_image['key']}\033[0m")  # Green
