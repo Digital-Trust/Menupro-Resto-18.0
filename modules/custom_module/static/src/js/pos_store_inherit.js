@@ -46,8 +46,8 @@ patch(PosStore.prototype, {
 
     getPrintingChanges(order, diningModeUpdate) {
         const time = DateTime.now().toFormat("dd/MM/yyyy HH:mm");
-        const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
-        const currentCashier = this.models["hr.employee"].get(cashier_id);
+        //const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
+        //const currentCashier = this.models["hr.employee"].get(cashier_id);
         return {
             table_name: order.table_id?.table_number || "",
             floor_name: order.table_id?.floor_id?.name || "",
@@ -56,7 +56,8 @@ patch(PosStore.prototype, {
             tracking_number: order.tracking_number,
             ticket_number: order.ticket_number,
             takeaway: order.config.takeaway && order.takeaway,
-            employee_name: currentCashier.name || order.employee_id?.name,
+            //employee_name: currentCashier.name || order.employee_id?.name,
+            employee_name: order.employee_id?.name || order.user_id?.name,
             order_note: order.general_note,
             diningModeUpdate: diningModeUpdate,
         };
