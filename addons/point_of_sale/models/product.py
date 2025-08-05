@@ -239,13 +239,15 @@ class ProductProduct(models.Model):
                          'values': list(map(lambda attr_name: {'name': attr_name, 'search': '%s %s' % (self.name, attr_name)}, attribute_line.value_ids.mapped('name')))}
                         for attribute_line in self.attribute_line_ids]
 
-        return {
+        payload = {
             'all_prices': all_prices,
             'pricelists': pricelist_list,
             'warehouses': warehouse_list,
             'suppliers': supplier_list,
             'variants': variant_list
         }
+        print("payload=*>",payload)
+        return payload
 
 
 class ProductAttribute(models.Model):
