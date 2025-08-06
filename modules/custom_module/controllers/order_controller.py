@@ -8,7 +8,6 @@ from datetime import date, datetime
 
 _logger = logging.getLogger(__name__)
 
-
 def json_default(obj):
     """Fonction de sérialisation personnalisée pour les objets non standards"""
     if isinstance(obj, (date, datetime)):
@@ -268,7 +267,7 @@ class OrderController(PosSelfOrderController):
                 'full_product_name': discount_product.name,
             })
 
-    def update_existing_order(self, existing_order, line_operations, access_token, takeaway):
+    def update_existing_order(self, existing_order, line_operations, access_token, takeaway,menupro_id):
         """
         Met à jour une commande existante
 
@@ -307,6 +306,7 @@ class OrderController(PosSelfOrderController):
             'table_id': existing_order.table_id.id,
             'state': 'draft',
             'takeaway': takeaway,
+            'menupro_id':menupro_id,
             'sequence_number': existing_order.sequence_number,
             'lines': [[
                 1 if line.id else 0,
@@ -329,7 +329,7 @@ class OrderController(PosSelfOrderController):
         request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
         return existing_order
 
-    def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway):
+    def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway,menupro_id):
         """
         Crée une nouvelle commande
 
@@ -359,6 +359,7 @@ class OrderController(PosSelfOrderController):
             'table_id': restaurant_table.id,
             'state': 'draft',
             'takeaway': takeaway,
+            'menupro_id': menupro_id,
             'sequence_number': None,
         }
 
@@ -404,7 +405,6 @@ class OrderController(PosSelfOrderController):
             }
 
         return response_data
-
     @http.route('/new_order', type='http', auth='public', methods=['POST'], csrf=False)
     def process_mobile_order(self, **kwargs):
         """
@@ -428,6 +428,7 @@ class OrderController(PosSelfOrderController):
             device_type = data.get('device_type', 'mobile')
             takeaway = order_data.get('takeaway')
             discount_code = order_data.get('discount_code')
+            menupro_id = order_data.get('menupro_id')
 
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
@@ -495,12 +496,12 @@ class OrderController(PosSelfOrderController):
 
             # Mise à jour ou création de commande
             if existing_order:
-                updated_order = self.update_existing_order(existing_order, line_operations, access_token, takeaway)
+                updated_order = self.update_existing_order(existing_order, line_operations, access_token, takeaway,menupro_id)
                 response_data = self.build_response_data(updated_order, restaurant_id, discount_info,
                                                          total_before_discount, is_update=True)
             else:
                 new_order_result = self.create_new_order(pos_config, restaurant_table, line_operations,
-                                                         access_token, takeaway)
+                                                         access_token, takeaway,menupro_id)
                 response_data = self.build_response_data(new_order_result, restaurant_id, discount_info,
                                                          total_before_discount, is_update=False)
 
