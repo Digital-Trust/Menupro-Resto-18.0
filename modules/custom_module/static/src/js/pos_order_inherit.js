@@ -2,7 +2,7 @@
 
 import { PosOrder } from "@point_of_sale/app/models/pos_order";
 import { patch } from "@web/core/utils/patch";
-//import { rpc } from "@web/core/network/rpc";
+import { rpc } from "@web/core/network/rpc";
 
 function generateLocalTicketNumber() {
     const today = new Date();
@@ -86,7 +86,7 @@ patch(PosOrder.prototype, {
 
             if (this.assert_editable()) {
                 lineToRemove.delete();
-                /*const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
+                const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
                 const currentCashier = this.models["hr.employee"].get(cashier_id);
                 try {
                      rpc("/web/dataset/call_kw/pos.order/write", {
@@ -100,7 +100,7 @@ patch(PosOrder.prototype, {
                     });
                 } catch (error) {
                     console.error("Erreur lors de la mise à jour du cashier:", error);
-                }*/
+                }
             }
         }
         if (!this.lines.length) {
