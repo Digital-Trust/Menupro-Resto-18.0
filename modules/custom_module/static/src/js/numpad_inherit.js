@@ -24,7 +24,6 @@ patch(Numpad.prototype, {
                     ...buttons[minusButtonIndex],
                     disabled: true
                 };
-                console.log(`Modified button at index ${minusButtonIndex}:`, buttons[minusButtonIndex]);
             }
         } else {
             // Fallback to our custom configuration
@@ -36,7 +35,6 @@ patch(Numpad.prototype, {
             ]);
         }
 
-        console.log("Final buttons:", buttons);
         return buttons;
     },
 

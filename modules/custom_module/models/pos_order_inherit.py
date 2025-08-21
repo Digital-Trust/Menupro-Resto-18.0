@@ -4,6 +4,7 @@ import logging
 import json
 from datetime import datetime
 
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -14,6 +15,75 @@ class PosOrder(models.Model):
     menupro_id = fields.Char(string='MenuPro ID')
     origine = fields.Char(string='Origine')
     ticket_number = fields.Integer(string='Ticket Number', help='Ticket number for the order')
+    mobile_user_id = fields.Char(
+        string="Mobile User ID",
+        help="Identifiant de l'utilisateur mobile ayant passé la commande"
+    )
+    subscription_id = fields.Char(
+        string="Mobile User Subscription ID",
+        help="Identifiant de l'abonnement utilisateur mobile pour la notification"
+    )
+
+    def _get_config(self):
+        """Charge et valide la config une seule fois par thread."""
+        if hasattr(self.env, "_mp_config"):
+            return self.env._mp_config
+
+        ICParam = self.env['ir.config_parameter'].sudo()
+
+        cfg = {
+            'notif_url': tools.config.get('notif_url'),
+            'secret_key': tools.config.get('secret_key'),
+            'odoo_secret_key': tools.config.get('odoo_secret_key'),
+            'restaurant_id': ICParam.get_param('restaurant_id'),
+        }
+
+        for k, v in cfg.items():
+            if not v:
+                _logger.error("%s is missing in config", k)
+                raise UserError(f"L’option '{k}' est manquante dans la configuration.")
+
+        self.env._mp_config = cfg
+        _logger.info("\033[92mMenuPro config OK\033[0m")
+        return cfg
+
+
+    def _call_mp(self, method, url, json=None):
+        cfg = self._get_config()
+        headers = {
+            "x-secret-key": cfg['secret_key'],
+            "x-odoo-secret-key": cfg['odoo_secret_key'],
+        }
+        try:
+            resp = requests.request(method, url, json=json, headers=headers, timeout=10)
+            resp.raise_for_status()
+            return resp.json() if resp.text else {}
+        except Exception as e:
+            _logger.warning("MenuPro %s %s failed → %s", method, url, e)
+            raise
+
+
+    def _build_payload(self):
+        cfg = self._get_config()
+        self.ensure_one()
+        return {
+            "menupro_id": self.menupro_id,
+            "write_date": self.write_date.isoformat() if self.write_date else None,
+            "cashier": self.cashier,
+            "pos_reference": self.pos_reference,
+            "state": self.state,
+            "restaurant_id": cfg['restaurant_id'],
+            "subscription_id":self.subscription_id,
+            "mobile_user_id": self.mobile_user_id,
+
+        }
+
+    def action_pos_order_cancel(self):
+        cfg = self._get_config()
+        base = cfg['notif_url']
+        result = super().action_pos_order_cancel()
+        data = self._call_mp("POST", f"{base}/Send-cancel-order-notif", self._build_payload())
+        return result
 
 
     @api.model
@@ -211,3 +281,6 @@ class PosOrder(models.Model):
         for vals in vals_list:
             vals['ticket_number'] = self.get_today_ticket_number()
         return super().create(vals_list)
+
+
+

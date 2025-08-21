@@ -8,6 +8,7 @@ from datetime import date, datetime
 
 _logger = logging.getLogger(__name__)
 
+
 def json_default(obj):
     """Fonction de sérialisation personnalisée pour les objets non standards"""
     if isinstance(obj, (date, datetime)):
@@ -267,7 +268,9 @@ class OrderController(PosSelfOrderController):
                 'full_product_name': discount_product.name,
             })
 
-    def update_existing_order(self, existing_order, line_operations, access_token, takeaway,menupro_id):
+
+    def update_existing_order(self, existing_order, line_operations, access_token, takeaway, menupro_id,
+                              mobile_user_id=None, subscription_id=None):
         """
         Met à jour une commande existante
 
@@ -275,6 +278,9 @@ class OrderController(PosSelfOrderController):
         :param line_operations: Opérations sur les lignes
         :param access_token: Token d'accès
         :param takeaway: Mode à emporter
+        :param menupro_id: ID du menu pro
+        :param mobile_user_id: ID de l'utilisateur mobile
+        :param subscription_id: subscription ID de l'utilisateur mobile Pour Notif
         :return: Données de réponse
         """
         # Application des opérations
@@ -282,10 +288,16 @@ class OrderController(PosSelfOrderController):
             if op[0] == 1:  # Mise à jour
                 request.env['pos.order.line'].sudo().browse(op[1]).write(op[2])
 
-        # Ajout des nouvelles lignes
-        new_lines = [op for op in line_operations if op[0] == 0]
-        if new_lines:
-            existing_order.write({'lines': new_lines})
+        # Préparation des données de mise à jour
+        update_data = {'lines': [op for op in line_operations if op[0] == 0]}
+
+        if mobile_user_id:
+            update_data['mobile_user_id'] = mobile_user_id
+        if subscription_id:
+            update_data['subscription_id'] = subscription_id
+
+        if update_data:
+            existing_order.write(update_data)
 
         # Recalcul des totaux
         existing_order._onchange_amount_all()
@@ -306,7 +318,7 @@ class OrderController(PosSelfOrderController):
             'table_id': existing_order.table_id.id,
             'state': 'draft',
             'takeaway': takeaway,
-            'menupro_id':menupro_id,
+            'menupro_id': menupro_id,
             'sequence_number': existing_order.sequence_number,
             'lines': [[
                 1 if line.id else 0,
@@ -326,10 +338,16 @@ class OrderController(PosSelfOrderController):
             ] for line in existing_order.lines]
         }
 
+        if mobile_user_id:
+            order_data_for_sync['mobile_user_id'] = mobile_user_id
+        if subscription_id:
+            order_data_for_sync['subscription_id'] = subscription_id
+
         request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
         return existing_order
 
-    def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway,menupro_id):
+    def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
+                         mobile_user_id=None, subscription_id=None):
         """
         Crée une nouvelle commande
 
@@ -338,6 +356,9 @@ class OrderController(PosSelfOrderController):
         :param line_operations: Opérations sur les lignes
         :param access_token: Token d'accès
         :param takeaway: Mode à emporter
+        :param menupro_id: ID du menu pro
+        :param mobile_user_id: ID de l'utilisateur mobile
+        :param subscription_id: subscription ID de l'utilisateur mobile Pour Notif
         :return: Résultat de la création
         """
         sequence = request.env['ir.sequence'].sudo().next_by_code('pos.order')
@@ -363,9 +384,15 @@ class OrderController(PosSelfOrderController):
             'sequence_number': None,
         }
 
+        if mobile_user_id:
+            order_dict['mobile_user_id'] = mobile_user_id
+        if subscription_id:
+            order_dict['subscription_id'] = subscription_id
+
         return super().process_order_args(order_dict, access_token, restaurant_table.identifier, 'mobile')
 
-    def build_response_data(self, order, restaurant_id, discount_info=None, total_before_discount=0.0, is_update=False):
+    def build_response_data(self, order, restaurant_id, discount_info=None, total_before_discount=0.0, is_update=False,
+                            mobile_user_id=None, subscription_id=None):
         """
         Construit les données de réponse
 
@@ -374,6 +401,8 @@ class OrderController(PosSelfOrderController):
         :param discount_info: Informations de remise
         :param total_before_discount: Total avant remise
         :param is_update: True si c'est une mise à jour
+        :param mobile_user_id: ID de l'utilisateur mobile
+        :param subscription_id: subscription ID de l'utilisateur mobile Pour Notif
         :return: Données de réponse
         """
         if is_update:
@@ -390,6 +419,12 @@ class OrderController(PosSelfOrderController):
                 response_data["restaurant_id"] = restaurant_id
             final_total = response_data.get("amount_total", 0.0)
 
+        if mobile_user_id:
+            response_data["mobile_user_id"] = mobile_user_id
+
+        if subscription_id:
+            response_data["subscription_id"] = subscription_id
+
         # Ajout des informations de remise si applicable
         if discount_info:
             response_data["discount_applied"] = {
@@ -405,6 +440,7 @@ class OrderController(PosSelfOrderController):
             }
 
         return response_data
+
     @http.route('/new_order', type='http', auth='public', methods=['POST'], csrf=False)
     def process_mobile_order(self, **kwargs):
         """
@@ -429,7 +465,8 @@ class OrderController(PosSelfOrderController):
             takeaway = order_data.get('takeaway')
             discount_code = order_data.get('discount_code')
             menupro_id = order_data.get('menupro_id')
-
+            mobile_user_id = order_data.get('mobile_user_id')
+            subscription_id = order_data.get('subscription_id')
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
 
@@ -437,6 +474,12 @@ class OrderController(PosSelfOrderController):
             if not all([pos_config_id, table_identifier, access_token]):
                 return http.Response(json.dumps({"error": "Missing required parameters"}),
                                      content_type='application/json', status=400)
+
+            if mobile_user_id:
+                _logger.info(f"Processing order for mobile_user_id: {mobile_user_id}")
+
+            if subscription_id:
+                _logger.info(f"Processing order for subscription_id: {subscription_id}")
 
             # Validation de la configuration POS
             pos_config = request.env['pos.config'].sudo().browse(pos_config_id)
@@ -494,16 +537,45 @@ class OrderController(PosSelfOrderController):
                     discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code)
                     line_operations.append(discount_line_op)
 
-            # Mise à jour ou création de commande
             if existing_order:
-                updated_order = self.update_existing_order(existing_order, line_operations, access_token, takeaway,menupro_id)
-                response_data = self.build_response_data(updated_order, restaurant_id, discount_info,
-                                                         total_before_discount, is_update=True)
+                updated_order = self.update_existing_order(
+                    existing_order,
+                    line_operations,
+                    access_token,
+                    takeaway,
+                    menupro_id,
+                    mobile_user_id,
+                    subscription_id
+                )
+                response_data = self.build_response_data(
+                    updated_order,
+                    restaurant_id,
+                    discount_info,
+                    total_before_discount,
+                    is_update=True,
+                    mobile_user_id=mobile_user_id,
+                    subscription_id=subscription_id
+                )
             else:
-                new_order_result = self.create_new_order(pos_config, restaurant_table, line_operations,
-                                                         access_token, takeaway,menupro_id)
-                response_data = self.build_response_data(new_order_result, restaurant_id, discount_info,
-                                                         total_before_discount, is_update=False)
+                new_order_result = self.create_new_order(
+                    pos_config,
+                    restaurant_table,
+                    line_operations,
+                    access_token,
+                    takeaway,
+                    menupro_id,
+                    mobile_user_id,
+                    subscription_id
+                )
+                response_data = self.build_response_data(
+                    new_order_result,
+                    restaurant_id,
+                    discount_info,
+                    total_before_discount,
+                    is_update=False,
+                    mobile_user_id=mobile_user_id,
+                    subscription_id=subscription_id
+                )
 
             # Retour de la réponse
             json_response = json.dumps(response_data, default=json_default)
