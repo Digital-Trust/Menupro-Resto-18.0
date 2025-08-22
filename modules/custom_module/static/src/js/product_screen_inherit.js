@@ -45,7 +45,7 @@ patch(ProductScreen.prototype, {
             {
                 value: "price",
                 text: _t("Price"),
-                disabled: true,
+                disabled: false,
             },
             BACKSPACE,
         ]).map((button) => ({
