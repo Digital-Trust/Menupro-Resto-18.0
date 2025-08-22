@@ -2,7 +2,7 @@
 
 import { PosOrder } from "@point_of_sale/app/models/pos_order";
 import { patch } from "@web/core/utils/patch";
-//import { rpc } from "@web/core/network/rpc";
+import { rpc } from "@web/core/network/rpc";
 
 function generateLocalTicketNumber() {
     const today = new Date();
@@ -70,7 +70,8 @@ patch(PosOrder.prototype, {
 
         const res = super.updateLastOrderChange();
     },
-      /**
+
+     /**
      * A wrapper around line.delete() that may potentially remove multiple orderlines.
      * In core pos, it removes the linked combo lines. In other modules, it may remove
      * other related lines, e.g. multiple reward lines in pos_loyalty module.
@@ -78,15 +79,16 @@ patch(PosOrder.prototype, {
      * @returns {boolean} true if the line was removed, false otherwise
      */
     removeOrderline(line) {
+        console.log("This =======>", this);
         const linesToRemove = line.getAllLinesInCombo();
         for (const lineToRemove of linesToRemove) {
+            console.log("line to remove",lineToRemove);
             if (lineToRemove.refunded_orderline_id?.uuid in this.uiState.lineToRefund) {
                 delete this.uiState.lineToRefund[lineToRemove.refunded_orderline_id.uuid];
             }
 
             if (this.assert_editable()) {
-                lineToRemove.delete();
-                /*const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
+                const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
                 const currentCashier = this.models["hr.employee"].get(cashier_id);
                 try {
                      rpc("/web/dataset/call_kw/pos.order/write", {
@@ -100,13 +102,46 @@ patch(PosOrder.prototype, {
                     });
                 } catch (error) {
                     console.error("Erreur lors de la mise à jour du cashier:", error);
-                }*/
+                }
+                const payload = {
+                    full_product_name: lineToRemove.full_product_name,
+                    line_id: lineToRemove.id,
+                    saved_quantity: lineToRemove.saved_quantity,
+                    cashier: currentCashier.name,
+                    order_id: this.id,
+                    date: new Date().toISOString(),
+                    mobile_user_id : this.mobile_user_id,
+                    subscription_id : this.subscription_id,
+                    order_menupro_id : this.menupro_id,
+
+                };
+                console.log(" JSON.stringify(payload)", JSON.stringify(payload))
+
+                fetch("http://localhost:3000/Notifications/Removed-dish/notif", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                })
+                .then((res) => res.json())
+                .then((data) => {
+                    console.log("Notification envoyée avec succès:", data);
+                })
+                .catch((err) => {
+                    console.error("Erreur lors de l'envoi de la notification:", err);
+                });
+                lineToRemove.delete();
+
             }
         }
+
         if (!this.lines.length) {
             this.general_note = "";
         }
+        console.log("finale this============>",this);
         return true;
     }
+
 
 });

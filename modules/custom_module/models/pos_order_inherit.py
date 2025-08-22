@@ -50,12 +50,10 @@ class PosOrder(models.Model):
 
     def _call_mp(self, method, url, json=None):
         cfg = self._get_config()
-        headers = {
-            "x-secret-key": cfg['secret_key'],
-            "x-odoo-secret-key": cfg['odoo_secret_key'],
-        }
+
         try:
-            resp = requests.request(method, url, json=json, headers=headers, timeout=10)
+            resp = requests.request(method, url, json=json, timeout=10)
+            print("res===++>",resp)
             resp.raise_for_status()
             return resp.json() if resp.text else {}
         except Exception as e:
@@ -79,12 +77,27 @@ class PosOrder(models.Model):
         }
 
     def action_pos_order_cancel(self):
-        cfg = self._get_config()
-        base = cfg['notif_url']
         result = super().action_pos_order_cancel()
-        data = self._call_mp("POST", f"{base}/Send-cancel-order-notif", self._build_payload())
-        return result
 
+        for order in self:
+            _logger.info("order.mobile_user_id ========> %s", order.mobile_user_id)
+            if order.mobile_user_id:
+                try:
+                    cfg = order._get_config()
+                    base = cfg.get('notif_url')
+                    if base:
+                        payload = order._build_payload()
+                        _logger.info("payload cancel notif: %s", payload)
+
+                        data = order._call_mp(
+                            "POST",
+                            f"http://localhost:3000/Notifications/Send-cancel-order-notif",
+                            payload
+                        )
+                        _logger.info("cancel notif response: %s", data)
+                except Exception as e:
+                    _logger.warning("Impossible d'envoyer la notif annulation: %s", e)
+        return result
 
     @api.model
     def sync_from_ui(self, orders):
@@ -137,7 +150,9 @@ class PosOrder(models.Model):
     def _sync_to_menupro(self, order):
         restaurant_id = self.env['ir.config_parameter'].sudo().get_param('restaurant_id')
         odoo_secret_key = tools.config.get("odoo_secret_key")
-        api_url = "https://api.finance.visto.group/orders/order/upsert"
+        # api_url = "https://api.finance.visto.group/orders/order/upsert"
+        api_url = "http://localhost:3000/orders/order/upsert"
+
 
         if not restaurant_id or not odoo_secret_key:
             _logger.error("Secret key or restaurant ID not configured. Skipped sync to menupro")
@@ -145,11 +160,11 @@ class PosOrder(models.Model):
 
         headers = {'x-odoo-key': odoo_secret_key}
         payload = self._prepare_api_payload(order, restaurant_id)
-        # print("Payload to be sent to our server =>", payload)
+        print("Payload to be sent to our server =>", payload)
 
         try:
             response = requests.patch(api_url, json=payload, headers=headers)
-            # print('response of finance =>', response.text)
+            print('response of finance =>', response.text)
         except Exception as e:
             _logger.error("Error API: %s", str(e))
             raise
@@ -213,6 +228,8 @@ class PosOrder(models.Model):
                     "menupro_id": order_data.get('menupro_id', False),
                     "status": "validate",
                     "menupro_fee": 0.5,
+                    "subscription_id": order_data.get('subscription_id'),
+                    "mobile_user_id": order_data.get('mobile_user_id'),
                     "ticketNumber": int(order_data.get('pos_reference', '0-0-0').split('-')[-1]),
                     "state": order_data.get('state', 'draft')
                 }
