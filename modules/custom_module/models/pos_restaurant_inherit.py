@@ -89,7 +89,7 @@ def check_and_create_table_mp(name, odoo_id, seats, identifier, floor):
     }
 
     response = requests.post('https://api.menupro.tn/restaurant-tables/' + restaurant_id, json=data, headers={'x-odoo-key': odoo_secret_key})
-    print("response content => ", response.content)
+    # print("response content => ", response.content)
     if response.status_code == 201:
         try:
             menupro_id = response.json().get('_id')
@@ -110,7 +110,7 @@ def update_table_mp(menupro_id, name, seats):
             "seats": seats
         }
         response = requests.patch('https://api.menupro.tn/restaurant-tables/' + menupro_id, json=data, headers={'x-odoo-key': odoo_secret_key})
-        print("content", response.content)
+        # print("content", response.content)
     except Exception as e:
         print(f"Error renaming floor: {e}")
 

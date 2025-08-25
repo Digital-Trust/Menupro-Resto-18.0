@@ -24,6 +24,8 @@ class PosOrder(models.Model):
         help="Identifiant de l'abonnement utilisateur mobile pour la notification"
     )
 
+
+
     def _get_config(self):
         """Charge et valide la config une seule fois par thread."""
         if hasattr(self.env, "_mp_config"):
@@ -53,7 +55,6 @@ class PosOrder(models.Model):
 
         try:
             resp = requests.request(method, url, json=json, timeout=10)
-            print("res===++>",resp)
             resp.raise_for_status()
             return resp.json() if resp.text else {}
         except Exception as e:
@@ -80,7 +81,7 @@ class PosOrder(models.Model):
         result = super().action_pos_order_cancel()
 
         for order in self:
-            _logger.info("order.mobile_user_id ========> %s", order.mobile_user_id)
+
             if order.mobile_user_id:
                 try:
                     cfg = order._get_config()
@@ -91,7 +92,7 @@ class PosOrder(models.Model):
 
                         data = order._call_mp(
                             "POST",
-                            f"http://localhost:3000/Notifications/Send-cancel-order-notif",
+                            f"{base}/Send-cancel-order-notif",
                             payload
                         )
                         _logger.info("cancel notif response: %s", data)
@@ -101,9 +102,54 @@ class PosOrder(models.Model):
 
     @api.model
     def sync_from_ui(self, orders):
+        # old_states = {}
+        # for order in orders:
+        #     if order.get("id"):
+        #         pos_order = self.browse(order["id"])
+        #         if not pos_order.exists():
+        #             continue
+        #         old_states[order["id"]] = {
+        #             "is_edited": pos_order.is_edited,
+        #             "has_deleted_line": pos_order.has_deleted_line,
+        #             "lines": pos_order.lines,
+        #             "last_order_preparation_change": pos_order.last_order_preparation_change,
+        #         }
+
         result = super().sync_from_ui(orders)
         created_orders = result.get('pos.order', {})
         for order in created_orders:
+            # pos_order = self.browse(order["id"])
+            # if pos_order.mobile_user_id:
+            #     old_state = old_states.get(order["id"], {})
+            #     if (
+            #             old_state.get("is_edited") != pos_order.is_edited
+            #             or old_state.get("has_deleted_line") != pos_order.has_deleted_line
+            #         or old_state.get("lines") != pos_order.lines
+            #         or old_state.get('pos_order.last_order_preparation_change') != pos_order.pos_order.last_order_preparation_change
+            #     ):
+            #         print(f"⚡ Order {pos_order.id} has changed!")
+            #         print("Before:", old_state)
+            #         print("After:", {
+            #             "is_edited": pos_order.is_edited,
+            #             "has_deleted_line": pos_order.has_deleted_line,
+            #             "lines": pos_order.lines,
+            #             "last_order_preparation_change": pos_order.last_order_preparation_change,
+            #         })
+            #         try:
+            #             cfg = pos_order._get_config()
+            #             base = cfg.get('notif_url')
+            #             if base:
+            #                 payload = pos_order._build_payload()
+            #                 _logger.info("payload cancel notif: %s", pos_order)
+            #
+            #                 data = pos_order._call_mp(
+            #                     "POST",
+            #                     f"{base}/Send-cancel-order-notif",
+            #                     payload
+            #                 )
+            #                 _logger.info("cancel notif response: %s", data)
+            #         except Exception as e:
+            #             _logger.warning("Impossible d'envoyer la notif annulation: %s", e)
             self._sync_reservation(order)
             self._sync_to_menupro(order)
             # Generate a ticket_number
@@ -160,11 +206,11 @@ class PosOrder(models.Model):
 
         headers = {'x-odoo-key': odoo_secret_key}
         payload = self._prepare_api_payload(order, restaurant_id)
-        print("Payload to be sent to our server =>", payload)
+        # print("Payload to be sent to our server =>", payload)
 
         try:
             response = requests.patch(api_url, json=payload, headers=headers)
-            print('response of finance =>', response.text)
+            # print('response of finance =>', response.text)
         except Exception as e:
             _logger.error("Error API: %s", str(e))
             raise
@@ -182,7 +228,7 @@ class PosOrder(models.Model):
         pos_order = self.env['pos.order'].sudo().search([('id', '=', order_id)], limit=1)
         if pos_order:
             pos_order.write({'menupro_id': menupro_id})
-            print(f"Order {pos_order.name} updated with menupro_id {menupro_id}")
+            # print(f"Order {pos_order.name} updated with menupro_id {menupro_id}")
         else:
             _logger.warning(f"No POS order found with ID {order_id}")
 

@@ -47,10 +47,10 @@ class ProductTemplateAttributeLine(models.Model):
         for rec in records:
             try:
                 payload = rec._build_payload()
-                print("Payload envoyé pour lines :", payload)
+                # print("Payload envoyé pour lines :", payload)
 
                 data = rec._call_mp("POST", base, payload)
-                print("Réponse reçue pour lines:", data)
+                # print("Réponse reçue pour lines:", data)
 
                 if data and data.get("_id"):
                     rec.menuproId = data.get("_id")
