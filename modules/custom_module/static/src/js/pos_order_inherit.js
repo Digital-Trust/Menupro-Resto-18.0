@@ -143,52 +143,48 @@ patch(PosOrder.prototype, {
             console.error("Erreur récupération restaurant_id:", error);
             restaurantId = null;
         }
-        if (this.assert_editable()) {
-            try {
-                await rpc("/web/dataset/call_kw/pos.order/write", {
-                        model: "pos.order",
-                        method: "write",
-                        args: [[this.id], {
-                            cashier: currentCashier.name,
-                            employee_id: currentCashier.id,
-                        }],
-                        kwargs: {},
-                    });
-            } catch (error) {
-                console.error("Erreur lors de la mise à jour du cashier:", error);
-            }
 
-        }
         for (const lineToRemove of linesToRemove) {
             if (lineToRemove.refunded_orderline_id?.uuid in this.uiState.lineToRefund) {
                 delete this.uiState.lineToRefund[lineToRemove.refunded_orderline_id.uuid];
             }
 
-             if (this.assert_editable()) {
-                 if (this.mobile_user_id != false){
-                      const payload = {
-                            line: sanitizeLine(lineToRemove),
-                            cashier: currentCashier.name,
+            if (this.assert_editable()) {
+                if (this.cashier) {
+                    try {
+                        const cashierResult = await rpc("/pos/update_cashier", {
                             order_id: this.id,
-                            date: new Date().toISOString(),
+                            cashier_id: currentCashier.id
+                        });
+
+                        if (!cashierResult.success) {
+                            console.error("Erreur mise à jour cashier:", cashierResult.error);
+                        }
+                    } catch (error) {
+                        console.error("Erreur lors de la mise à jour du cashier:", error);
+                    }
+                }
+
+                if (this.mobile_user_id != false && typeof lineToRemove.id === 'number') {
+                    try {
+                        const notificationResult = await rpc("/pos/send_removed_dish_notification", {
+                            line_data: sanitizeLine(lineToRemove),
+                            cashier_name: currentCashier.name,
+                            order_id: this.id,
                             mobile_user_id: this.mobile_user_id,
                             subscription_id: this.subscription_id,
                             order_menupro_id: this.menupro_id,
                             restaurant_id: restaurantId,
-                        };
+                        });
 
-
-                        fetch("http://localhost:3000/Notifications/Removed-dish/notif", {
-                            method: "POST",
-                            headers: {
-                                "x-api-key": "stringTest1@SECRET_KEY",
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify(payload),
-                        })
-                        .then((res) => res.json())
-                        .then((data) => console.log("Notification envoyée:", data))
-                        .catch((err) => console.error("Erreur notification:", err));
+                        if (notificationResult.success) {
+                            console.log("Notification envoyée:", notificationResult.data);
+                        } else {
+                            console.error("Erreur notification:", notificationResult.error);
+                        }
+                    } catch (error) {
+                        console.error("Erreur lors de l'envoi de notification:", error);
+                    }
                 }
 
                 lineToRemove.delete();
