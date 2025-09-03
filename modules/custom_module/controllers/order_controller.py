@@ -270,11 +270,11 @@ class OrderController(PosSelfOrderController):
     def update_existing_order(self, existing_order, line_operations, access_token, takeaway, menupro_id,
                               mobile_user_id=None, subscription_id=None):
         """
-        Met à jour une commande existante avec correction pour mobile_user_id et subscription_id
+        Met à jour une commande existante avec gestion takeaway/floating orders
         """
         # Application des opérations sur les lignes
         for op in line_operations:
-            if op[0] == 1:  # Mise à jour
+            if op[0] == 1:
                 request.env['pos.order.line'].sudo().browse(op[1]).write(op[2])
 
         # Ajout des nouvelles lignes
@@ -282,14 +282,28 @@ class OrderController(PosSelfOrderController):
         if new_lines:
             existing_order.write({'lines': new_lines})
 
-        # *** CORRECTION : Mise à jour des champs mobile_user_id et subscription_id ***
+        # *** GESTION DES MISES À JOUR ***
         update_values = {}
         if mobile_user_id is not None:
             update_values['mobile_user_id'] = mobile_user_id
         if subscription_id is not None:
             update_values['subscription_id'] = subscription_id
+        # Gestion du changement takeaway
+        if takeaway != existing_order.takeaway:
+            update_values['takeaway'] = takeaway
 
-        # Mise à jour de la commande avec les nouveaux IDs
+            if takeaway:
+                # Conversion vers floating order
+                update_values['table_id'] = False
+                update_values['floating_order_name'] = f"Takeaway {existing_order.name}"
+                _logger.info(f"Conversion de la commande {existing_order.name} vers floating order (takeaway)")
+            else:
+                # Conversion de takeaway vers dine-in
+                if not existing_order.table_id:
+                    _logger.warning(f"Conversion floating order {existing_order.name} vers dine-in - table requise")
+                update_values['floating_order_name'] = False  # Supprimer le nom floating
+
+        # Mise à jour de la commande
         if update_values:
             existing_order.write(update_values)
 
@@ -309,12 +323,13 @@ class OrderController(PosSelfOrderController):
             'amount_paid': existing_order.amount_paid,
             'amount_return': existing_order.amount_return,
             'uuid': existing_order.uuid,
-            'table_id': existing_order.table_id.id,
+            'table_id': existing_order.table_id.id if existing_order.table_id else False,
             'state': 'draft',
             'takeaway': takeaway,
             'sequence_number': existing_order.sequence_number,
-            'mobile_user_id': mobile_user_id,  # *** AJOUTÉ ***
-            'subscription_id': subscription_id,  # *** AJOUTÉ ***
+            'mobile_user_id': mobile_user_id,
+            'subscription_id': subscription_id,
+            'floating_order_name': existing_order.floating_order_name,
             'lines': [[
                 1 if line.id else 0,
                 line.id if line.id else 0,
@@ -351,12 +366,13 @@ class OrderController(PosSelfOrderController):
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
                          mobile_user_id=None, subscription_id=None):
         """
-        Crée une nouvelle commande avec correction du menupro_id
+        Crée une nouvelle commande avec gestion des floatingOrder pour takeaway
         """
         sequence = request.env['ir.sequence'].sudo().next_by_code('pos.order')
         amount_total = sum(line[2]['price_subtotal_incl'] for line in line_operations)
         amount_tax = sum(line[2]['price_subtotal_incl'] - line[2]['price_subtotal'] for line in line_operations)
 
+        # Configuration de base de la commande
         order_dict = {
             'name': sequence,
             'pos_reference': sequence,
@@ -369,14 +385,29 @@ class OrderController(PosSelfOrderController):
             'amount_paid': 0.0,
             'amount_return': 0.0,
             'uuid': str(uuid.uuid4()),
-            'table_id': restaurant_table.id,
             'state': 'draft',
-            'takeaway': takeaway,
             'sequence_number': None,
             'mobile_user_id': mobile_user_id,
             'subscription_id': subscription_id,
-            'menupro_id': menupro_id,  # *** AJOUTÉ : champ menupro_id ***
+            'menupro_id': menupro_id,
         }
+
+        # *** GESTION TAKEAWAY - FLOATING ORDER ***
+        if takeaway:
+            # Pour takeaway, créer une floating order (sans table)
+            order_dict.update({
+                'table_id': False,
+                'takeaway': True,
+                'floating_order_name': f"TKO- {sequence}",
+            })
+            _logger.info(f"Création d'une floating order takeaway: {sequence}")
+        else:
+            # Pour dine-in, utiliser la table normale
+            order_dict.update({
+                'table_id': restaurant_table.id,
+                'takeaway': False,
+            })
+            _logger.info(f"Création d'une commande table: {restaurant_table.name}")
 
         # *** DEBUG : Log des valeurs avant création ***
         _logger.info(f"=== CREATE ORDER DEBUG ===")
@@ -384,9 +415,13 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"subscription_id à créer: {subscription_id}")
         _logger.info(f"menupro_id à créer: {menupro_id}")
         _logger.info(f"takeaway: {takeaway}")
+        _logger.info(f"table_id: {order_dict.get('table_id', 'None (Floating Order)')}")
+        _logger.info(f"floating_order_name: {order_dict.get('floating_order_name', 'None')}")
         _logger.info(f"=== END CREATE DEBUG ===")
 
-        return super().process_order_args(order_dict, access_token, restaurant_table.identifier, 'mobile')
+        # Pour les floating orders, pas besoin de table_identifier
+        table_identifier = restaurant_table.identifier if restaurant_table else None
+        return super().process_order_args(order_dict, access_token, table_identifier, 'mobile')
 
     def build_response_data(self, order, restaurant_id, discount_info=None, total_before_discount=0.0, is_update=False,
                             mobile_user_id=None, subscription_id=None):
@@ -435,10 +470,11 @@ class OrderController(PosSelfOrderController):
             }
 
         return response_data
+
     @http.route('/new_order', type='http', auth='public', methods=['POST'], csrf=False)
     def process_mobile_order(self, **kwargs):
         """
-        Version corrigée avec meilleure gestion du menupro_id
+        Version complète avec gestion takeaway/floating orders
         """
         _logger.info('******************* process_mobile_order **************')
         try:
@@ -456,7 +492,7 @@ class OrderController(PosSelfOrderController):
             table_identifier = data.get('table_identifier')
             access_token = data.get('access_token')
             device_type = data.get('device_type', 'mobile')
-            takeaway = order_data.get('takeaway')
+            takeaway = order_data.get('takeaway', False)
             discount_code = order_data.get('discount_code')
             mobile_user_id = order_data.get('mobile_user_id')
             subscription_id = order_data.get('subscription_id')
@@ -471,8 +507,14 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"takeaway reçu: {takeaway}")
 
             # Validation des paramètres requis
-            if not all([pos_config_id, table_identifier, access_token]):
-                return http.Response(json.dumps({"error": "Missing required parameters"}),
+            required_params = [pos_config_id, access_token]
+            if not takeaway:
+                required_params.append(table_identifier)
+
+            if not all(required_params):
+                missing = [p for p in ['pos_config_id', 'table_identifier', 'access_token']
+                           if not locals().get(p.replace('_', '').replace('identifier', '_identifier'))]
+                return http.Response(json.dumps({"error": f"Missing required parameters: {missing}"}),
                                      content_type='application/json', status=400)
 
             # Validation de la configuration POS
@@ -481,14 +523,22 @@ class OrderController(PosSelfOrderController):
                 return http.Response(json.dumps({"error": "POS configuration or session not found"}),
                                      content_type='application/json', status=400)
 
-            # Validation de la table
-            restaurant_table = request.env['restaurant.table'].sudo().search([
-                ('identifier', '=', table_identifier),
-            ], limit=1)
+            # Validation de la table (seulement pour dine-in)
+            restaurant_table = None
+            if not takeaway:
+                restaurant_table = request.env['restaurant.table'].sudo().search([
+                    ('identifier', '=', table_identifier),
+                ], limit=1)
 
-            if not restaurant_table:
-                return http.Response(json.dumps({"error": f"Table '{table_identifier}' not found"}),
-                                     content_type='application/json', status=404)
+                if not restaurant_table:
+                    return http.Response(json.dumps({"error": f"Table '{table_identifier}' not found"}),
+                                         content_type='application/json', status=404)
+            else:
+                # Pour takeaway, créer une table fictive ou utiliser une table par défaut
+                restaurant_table = request.env['restaurant.table'].sudo().search([], limit=1)
+                if not restaurant_table:
+                    return http.Response(json.dumps({"error": "No default table found for takeaway orders"}),
+                                         content_type='application/json', status=400)
 
             # Récupération de l'ID du restaurant
             restaurant_id = request.env['ir.config_parameter'].sudo().get_param('restaurant_id')
@@ -498,14 +548,32 @@ class OrderController(PosSelfOrderController):
             if restaurant_id:
                 request.env['restaurant.discount.config'].sudo().ensure_config_exists()
 
-            # Recherche de commande existante
-            existing_order = request.env['pos.order'].sudo().search([
-                ('table_id', '=', restaurant_table.id),
-                ('session_id', '=', pos_config.current_session_id.id),
-                ('state', '=', 'draft')
-            ], limit=1)
+            # *** RECHERCHE DE COMMANDE EXISTANTE - ADAPTÉE TAKEAWAY ***
+            if takeaway:
+                # Pour takeaway, chercher une floating order existante avec le même mobile_user_id
+                existing_order = request.env['pos.order'].sudo().search([
+                    ('session_id', '=', pos_config.current_session_id.id),
+                    ('state', '=', 'draft'),
+                    ('table_id', '=', False),  # Floating order
+                    ('takeaway', '=', True),
+                    ('mobile_user_id', '=', mobile_user_id),
+                ], limit=1)
 
-            # Calcul du total avant remise (lignes existantes)
+                _logger.info(
+                    f"Recherche floating order takeaway - mobile_user_id: {mobile_user_id}, trouvée: {bool(existing_order)}")
+            else:
+                # Pour dine-in, chercher par table comme avant
+                existing_order = request.env['pos.order'].sudo().search([
+                    ('table_id', '=', restaurant_table.id),
+                    ('session_id', '=', pos_config.current_session_id.id),
+                    ('state', '=', 'draft')
+                ], limit=1)
+
+                _logger.info(f"Recherche commande table {restaurant_table.name}, trouvée: {bool(existing_order)}")
+
+            _logger.info(f"Commande existante trouvée: {existing_order.name if existing_order else 'Aucune'}")
+
+            # Calcul du total avant remise
             discount_config = None
             discount_product_name = None
             if discount_code:
@@ -536,7 +604,7 @@ class OrderController(PosSelfOrderController):
                     line_operations,
                     access_token,
                     takeaway,
-                    menupro_id,  # *** CORRECTION : Maintenant menupro_id est correct ***
+                    menupro_id,
                     mobile_user_id,
                     subscription_id
                 )
@@ -571,17 +639,16 @@ class OrderController(PosSelfOrderController):
                     subscription_id=subscription_id
                 )
 
+            # Debug de la réponse
             _logger.info(f"=== RESPONSE DATA DEBUG ===")
-            _logger.info(f"Response data type: {type(response_data)}")
             if isinstance(response_data, dict):
                 _logger.info(f"Response keys: {list(response_data.keys())}")
+                _logger.info(f"takeaway in response: {response_data.get('takeaway', 'NOT_FOUND')}")
                 _logger.info(f"mobile_user_id in response: {response_data.get('mobile_user_id', 'NOT_FOUND')}")
-                _logger.info(f"subscription_id in response: {response_data.get('subscription_id', 'NOT_FOUND')}")
             _logger.info(f"=== END RESPONSE DEBUG ===")
 
             # Retour de la réponse
             json_response = json.dumps(response_data, default=json_default)
-            _logger.info(f"JSON response length: {len(json_response)}")
             return http.Response(json_response, content_type='application/json', status=200)
 
         except Exception as e:
