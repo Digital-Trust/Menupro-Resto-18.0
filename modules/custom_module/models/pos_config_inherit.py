@@ -150,7 +150,7 @@ class PosConfig(models.Model):
         return {
             'search_params': {
                 'domain': [],
-                'fields': ['id', 'name', 'allowed_floor_ids'],
+                'fields': ['id', 'name', 'allowed_floor_ids', 'can_manage_takeaway_orders'],
             }
         }
 
