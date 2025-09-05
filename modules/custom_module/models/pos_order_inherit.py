@@ -23,6 +23,11 @@ class PosOrder(models.Model):
         string="Mobile User Subscription ID",
         help="Identifiant de l'abonnement utilisateur mobile pour la notification"
     )
+    paid_online = fields.Boolean(
+        string="Paid Online",
+        default=False,
+        help="Indique si la commande a été payée en ligne"
+    )
 
 
 
@@ -276,6 +281,7 @@ class PosOrder(models.Model):
                     "menupro_fee": 0.5,
                     "subscription_id": order_data.get('subscription_id'),
                     "mobile_user_id": order_data.get('mobile_user_id'),
+                    "paid_online": order_data.get('paid_online', False),
                     "ticketNumber": int(order_data.get('pos_reference', '0-0-0').split('-')[-1]),
                     "state": order_data.get('state', 'draft')
                 }

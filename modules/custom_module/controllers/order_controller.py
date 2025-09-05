@@ -268,7 +268,7 @@ class OrderController(PosSelfOrderController):
             })
 
     def update_existing_order(self, existing_order, line_operations, access_token, takeaway, menupro_id,
-                              mobile_user_id=None, subscription_id=None):
+                              mobile_user_id=None, subscription_id=None, paid_online=None):
         """
         Met à jour une commande existante avec gestion takeaway/floating orders
         """
@@ -288,6 +288,9 @@ class OrderController(PosSelfOrderController):
             update_values['mobile_user_id'] = mobile_user_id
         if subscription_id is not None:
             update_values['subscription_id'] = subscription_id
+        if paid_online is not None:
+            update_values['paid_online'] = paid_online
+            _logger.info(f"Mise à jour paid_online: {paid_online}")
         # Gestion du changement takeaway
         if takeaway != existing_order.takeaway:
             update_values['takeaway'] = takeaway
@@ -330,6 +333,7 @@ class OrderController(PosSelfOrderController):
             'mobile_user_id': mobile_user_id,
             'subscription_id': subscription_id,
             'floating_order_name': existing_order.floating_order_name,
+            'paid_online': paid_online,
             'lines': [[
                 1 if line.id else 0,
                 line.id if line.id else 0,
@@ -364,7 +368,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"=== END DEBUG ===")
 
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
-                         mobile_user_id=None, subscription_id=None):
+                         mobile_user_id=None, subscription_id=None, paid_online=None):
         """
         Crée une nouvelle commande avec gestion des floatingOrder pour takeaway
         """
@@ -390,6 +394,7 @@ class OrderController(PosSelfOrderController):
             'mobile_user_id': mobile_user_id,
             'subscription_id': subscription_id,
             'menupro_id': menupro_id,
+            'paid_online': paid_online or False,
         }
 
         # *** GESTION TAKEAWAY - FLOATING ORDER ***
@@ -407,7 +412,7 @@ class OrderController(PosSelfOrderController):
                 'table_id': restaurant_table.id,
                 'takeaway': False,
             })
-            _logger.info(f"Création d'une commande table: {restaurant_table.name}")
+            _logger.info(f"Création d'une commande table: {restaurant_table.table_number}")
 
         # *** DEBUG : Log des valeurs avant création ***
         _logger.info(f"=== CREATE ORDER DEBUG ===")
@@ -415,6 +420,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"subscription_id à créer: {subscription_id}")
         _logger.info(f"menupro_id à créer: {menupro_id}")
         _logger.info(f"takeaway: {takeaway}")
+        _logger.info(f"paid_online: {paid_online}")
         _logger.info(f"table_id: {order_dict.get('table_id', 'None (Floating Order)')}")
         _logger.info(f"floating_order_name: {order_dict.get('floating_order_name', 'None')}")
         _logger.info(f"=== END CREATE DEBUG ===")
@@ -497,6 +503,7 @@ class OrderController(PosSelfOrderController):
             mobile_user_id = order_data.get('mobile_user_id')
             subscription_id = order_data.get('subscription_id')
             menupro_id = order_data.get('menupro_id')
+            paid_online = order_data.get('paid_online', False)
 
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
@@ -505,6 +512,7 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"subscription_id reçu: {subscription_id}")
             _logger.info(f"menupro_id reçu: {menupro_id}")
             _logger.info(f"takeaway reçu: {takeaway}")
+            _logger.info(f"paid_online reçu: {paid_online}")
 
             # Validation des paramètres requis
             required_params = [pos_config_id, access_token]
@@ -569,7 +577,7 @@ class OrderController(PosSelfOrderController):
                     ('state', '=', 'draft')
                 ], limit=1)
 
-                _logger.info(f"Recherche commande table {restaurant_table.name}, trouvée: {bool(existing_order)}")
+                _logger.info(f"Recherche commande table {restaurant_table.table_number}, trouvée: {bool(existing_order)}")
 
             _logger.info(f"Commande existante trouvée: {existing_order.name if existing_order else 'Aucune'}")
 
@@ -606,7 +614,8 @@ class OrderController(PosSelfOrderController):
                     takeaway,
                     menupro_id,
                     mobile_user_id,
-                    subscription_id
+                    subscription_id,
+                    paid_online
                 )
                 response_data = self.build_response_data(
                     updated_order,
@@ -627,7 +636,8 @@ class OrderController(PosSelfOrderController):
                     takeaway,
                     menupro_id,
                     mobile_user_id,
-                    subscription_id
+                    subscription_id,
+                    paid_online
                 )
                 response_data = self.build_response_data(
                     new_order_result,

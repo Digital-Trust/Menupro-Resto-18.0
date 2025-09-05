@@ -34,19 +34,15 @@ patch(FloorScreen.prototype, {
             potentialLink: null,
         });
 
-        // 🚨 AJOUT : Surveillance des ordres flottants
         this.setupFloatingOrderMonitoring();
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Surveillance des ordres flottants
     setupFloatingOrderMonitoring() {
-        // Vérifier les changements toutes les 2 secondes
         this.floatingOrderInterval = setInterval(() => {
             this.checkFloatingOrderChanges();
         }, 2000);
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Vérification des changements d'ordres flottants
     checkFloatingOrderChanges() {
         try {
             const floatingOrders = this.pos.models["pos.order"].filter(
@@ -67,7 +63,6 @@ patch(FloorScreen.prototype, {
         }
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Détection d'ordre flottant
     isFloatingOrder(order) {
         return order.takeaway &&
                !order.table_id &&
@@ -75,9 +70,7 @@ patch(FloorScreen.prototype, {
                (order.pos_reference?.includes('Self-Order') || order.origine === 'mobile');
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Vérification des changements
     hasFloatingOrderChanged(order) {
-        // Initialisation des trackers si nécessaire
         if (order.lastFloatingChangeCount === undefined) {
             order.lastFloatingChangeCount = 0;
         }
@@ -88,7 +81,6 @@ patch(FloorScreen.prototype, {
             order.lastFloatingAmount = order.amount_total || 0;
         }
 
-        // Calcul des changements
         const currentChanges = this.calculateFloatingOrderChanges(order);
         const linesChanged = order.lines.length !== order.lastFloatingLinesLength;
         const amountChanged = Math.abs((order.amount_total || 0) - order.lastFloatingAmount) > 0.01;
@@ -98,11 +90,9 @@ patch(FloorScreen.prototype, {
                amountChanged;
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Calcul des changements pour ordres flottants
     calculateFloatingOrderChanges(order) {
         let changes = 0;
 
-        // Changements dans les lignes
         for (const line of order.lines) {
             if (line.lastChangeCount === undefined) {
                 line.lastChangeCount = 0;
@@ -115,31 +105,26 @@ patch(FloorScreen.prototype, {
             }
         }
 
-        // Changements dans les attributs
         if (order.mobile_user_id && order.subscription_id) {
-            changes++; // Ordre mobile = changement
+            changes++;
         }
 
         return changes;
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Calcul des changements de ligne
     calculateLineChanges(line) {
         let changes = 0;
 
-        // Quantité
         if (line.qty !== (line.lastQty || 0)) {
             changes++;
             line.lastQty = line.qty;
         }
 
-        // Prix
         if (Math.abs(line.price_subtotal - (line.lastPrice || 0)) > 0.01) {
             changes++;
             line.lastPrice = line.price_subtotal;
         }
 
-        // Notes
         if (line.note !== (line.lastNote || '')) {
             changes++;
             line.lastNote = line.note;
@@ -148,18 +133,14 @@ patch(FloorScreen.prototype, {
         return changes;
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Mise à jour du tracking
     updateFloatingOrderChangeTracking(order) {
         order.lastFloatingChangeCount = this.calculateFloatingOrderChanges(order);
         order.lastFloatingLinesLength = order.lines.length;
         order.lastFloatingAmount = order.amount_total || 0;
 
-        console.log(`🔔 Sonnerie déclenchée pour l'ordre flottant: ${order.floating_order_name}`);
     },
 
-    // 🆕 NOUVELLE MÉTHODE : Notification visuelle (optionnelle)
     showFloatingOrderNotification(order) {
-        // Utilisation du service de notification si disponible
         if (this.env.services.notification) {
             this.env.services.notification.add(
                 `🆕 Mise à jour de l'ordre flottant: ${order.floating_order_name}`,
@@ -220,27 +201,21 @@ patch(FloorScreen.prototype, {
         return result;
     },
 
-    // 🚨 AMÉLIORATION : Méthode de nettoyage
     destroy() {
-        // Nettoyer l'intervalle lors de la destruction du composant
         if (this.floatingOrderInterval) {
             clearInterval(this.floatingOrderInterval);
         }
         super.destroy();
     },
 
-    // 🔧 CORRECTION : Fonction playSound avec UN SEUL son
     playSound(soundFile) {
         fetch(soundFile, { method: 'HEAD' })
             .then(response => {
                 if (response.ok) {
                     const audio = new Audio(soundFile);
-                    audio.volume = 1.0; // Volume maximum
+                    audio.volume = 1.0;
 
-                    // Jouer le son une seule fois
                     audio.play().catch(error => {
-                        console.log('Error playing sound:', error);
-                        // Fallback : essayer avec interaction utilisateur
                         document.addEventListener('click', () => {
                             audio.play().catch(err => {
                                 console.log('Still cannot play sound after user interaction:', err);
