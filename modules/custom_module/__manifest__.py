@@ -65,7 +65,9 @@
                 'custom_module/static/src/js/closing_popup_inherit.js',
                 'custom_module/static/src/js/error_handlers_inherit.js',
                 'custom_module/static/src/js/order_tabs_inherit.js',
-                'custom_module/static/src/js/numpad_inherit.js'
+                'custom_module/static/src/js/numpad_inherit.js',
+                'custom_module/static/src/js/payment_screen_inherit.js',
+                'custom_module/static/src/xml/payment_screen_inherit.xml'
             ],
     },
     'images': [
