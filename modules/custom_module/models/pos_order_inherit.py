@@ -201,8 +201,7 @@ class PosOrder(models.Model):
     def _sync_to_menupro(self, order):
         restaurant_id = self.env['ir.config_parameter'].sudo().get_param('restaurant_id')
         odoo_secret_key = tools.config.get("odoo_secret_key")
-        # api_url = "https://api.finance.visto.group/orders/order/upsert"
-        api_url = "http://localhost:3000/orders/order/upsert"
+        api_url = "https://api.finance.visto.group/orders/order/upsert"
 
 
         if not restaurant_id or not odoo_secret_key:
