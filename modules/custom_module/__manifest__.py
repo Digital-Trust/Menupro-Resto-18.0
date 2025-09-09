@@ -67,7 +67,11 @@
                 'custom_module/static/src/js/order_tabs_inherit.js',
                 'custom_module/static/src/js/numpad_inherit.js',
                 'custom_module/static/src/js/payment_screen_inherit.js',
-                'custom_module/static/src/xml/payment_screen_inherit.xml'
+                'custom_module/static/src/xml/payment_screen_inherit.xml',
+                'custom_module/static/src/js/product_card_inherit.js',
+                'custom_module/static/src/js/orderline_inherit.js',
+
+
             ],
     },
     'images': [
