@@ -229,5 +229,21 @@ patch(FloorScreen.prototype, {
             .catch(error => {
                 console.log('Error fetching sound file:', error);
             });
+    },
+
+    getFloorChangeCount(floor) {
+        let changeCount = 0;
+        if (!floor) {
+            return changeCount;
+        }
+        const table_ids = floor.table_ids;
+
+        for (const table of table_ids) {
+            const tableChange = this.getChangeCount(table);
+            if (tableChange && typeof tableChange.changes === "number") {
+                changeCount += tableChange.changes;
+            }
+        }
+        return changeCount;
     }
 });
