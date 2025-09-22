@@ -190,13 +190,10 @@ patch(PosOrder.prototype, {
                 lineToRemove.delete();
             }
         }
-
         if (!this.lines.length) {
             this.general_note = "";
         }
-
         return true;
     }
-
 
 });
