@@ -43,15 +43,15 @@ class SystemParameterController(http.Controller):
             return {'error': 'Local IP not configured'}
 
         print_receipt_url = f"{local_ip}/print_receipt"
-        print("url", print_receipt_url)
+        # print("url", print_receipt_url)
 
         data = json.loads(request.httprequest.data.decode('utf-8'))
-        print("data passed", data)
+        # print("data passed", data)
 
         headers = {'Content-Type': 'application/json'}
 
         response = requests.post(print_receipt_url, headers=headers, json=data)
-        print("response content", response.content)
+        # print("response content", response.content)
 
         if response.status_code == 200:
             print("Response from the controller", response)
@@ -61,20 +61,16 @@ class SystemParameterController(http.Controller):
 
     @http.route('/custom_module/public_ip', type='json', auth='public', methods=['POST'])
     def get_public_ip(self):
-        print_port = request.env['ir.config_parameter'].sudo().get_param('print_port')
-        if not print_port:
-            return {'error': 'Public IP "print_port" not configured'}
-
         data = json.loads(request.httprequest.data.decode('utf-8'))
-        _logger.info("data => : %s", data)
-        print("data passed", data)
-
-        print_receipt_url = f"http://{data['public_ip']}:{print_port}/print_receipt"
-        _logger.info("print_receipt_url: %s", print_receipt_url)
-        print("url", print_receipt_url)
-
+        print_url = request.env['ir.config_parameter'].sudo().get_param('print_url')
+        if print_url:
+            print_receipt_url = f"{data['public_ip']}/print_receipt"
+        else:
+            print_port = request.env['ir.config_parameter'].sudo().get_param('print_port')
+            if not print_port:
+                return {'error': 'Public IP "print_port" not configured'}
+            print_receipt_url = f"http://{data['public_ip']}:{print_port}/print_receipt"
         headers = {'Content-Type': 'application/json'}
-
         response = requests.post(print_receipt_url, headers=headers, json=data)
         print("response content", response.content)
 

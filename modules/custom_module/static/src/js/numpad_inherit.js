@@ -10,24 +10,19 @@ patch(Numpad.prototype, {
     get buttons() {
         let buttons;
         if (this.props.buttons) {
-            // Use props.buttons but modify the +/- button
             buttons = [...this.props.buttons];
 
-           // Find and modify the +/- button
             const minusButtonIndex = buttons.findIndex(btn =>
                 typeof btn === 'object' && btn.value === '-' && btn.text === '+/-'
             );
 
             if (minusButtonIndex !== -1) {
-                // Modify the existing button to add disabled: true
                 buttons[minusButtonIndex] = {
                     ...buttons[minusButtonIndex],
                     disabled: true
                 };
-                console.log(`Modified button at index ${minusButtonIndex}:`, buttons[minusButtonIndex]);
             }
         } else {
-            // Fallback to our custom configuration
             buttons = getButtons(DEFAULT_LAST_ROW, [
                 { value: "+10" },
                 { value: "+20" },
@@ -36,7 +31,16 @@ patch(Numpad.prototype, {
             ]);
         }
 
-        console.log("Final buttons:", buttons);
+        const backspaceButton = buttons.find(btn =>
+            typeof btn === 'object' && btn.value === 'Backspace'
+        );
+
+        if (backspaceButton && this.isFloatingOrder()) {
+            backspaceButton.disabled = true;
+            backspaceButton.text = "🚫";
+            backspaceButton.class = "numpad-backspace-disabled";
+        }
+
         return buttons;
     },
 
@@ -45,17 +49,18 @@ patch(Numpad.prototype, {
             this.numberBuffer = useService("number_buffer");
         }
 
-        // Define our own onClick that checks the disabled property
         this.onClick = (buttonValue) => {
+            if (buttonValue === "Backspace" && this.isFloatingOrder()) {
+                return;
+            }
 
-           // Find the clicked button
+            // Find the clicked button
             const button = this.buttons.find(btn => {
                 if (typeof btn === 'object' && 'value' in btn) {
                     return btn.value === buttonValue;
                 }
                 return btn === buttonValue;
             });
-
 
             if (button && typeof button === 'object' && button.disabled) {
                 return;
@@ -67,5 +72,22 @@ patch(Numpad.prototype, {
                 return this.numberBuffer.sendKey(buttonValue);
             }
         };
+    },
+
+    isFloatingOrder() {
+        try {
+            const pos = this.env.services.pos;
+            if (!pos) return false;
+
+            const currentOrder = pos.get_order();
+            if (!currentOrder) return false;
+
+            return currentOrder.takeaway &&
+                   !currentOrder.table_id &&
+                   currentOrder.floating_order_name;
+        } catch (error) {
+            console.warn("Erreur lors de la détection d'ordre flottant:", error);
+            return false;
+        }
     }
 });

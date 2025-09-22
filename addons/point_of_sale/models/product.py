@@ -246,7 +246,6 @@ class ProductProduct(models.Model):
             'suppliers': supplier_list,
             'variants': variant_list
         }
-        print("payload=*>",payload)
         return payload
 
 

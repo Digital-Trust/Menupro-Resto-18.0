@@ -12,7 +12,7 @@ class PosSession(models.Model):
         result = super()._load_pos_data_fields(config_id)
         pos_order = self.env['pos.order']
         ticket_number = pos_order.get_today_ticket_number()
-        print("ticket_number", ticket_number)
+        # print("ticket_number", ticket_number)
         result.append('ticket_number')
         return result
 
@@ -23,7 +23,7 @@ class PosSession(models.Model):
         ])
 
         installed_modules_names = installed_modules.mapped('name')
-        print('installed_modules_names',installed_modules_names)
+        # print('installed_modules_names',installed_modules_names)
 
 
         if 'mrp' in installed_modules_names and 'stock' in installed_modules_names:

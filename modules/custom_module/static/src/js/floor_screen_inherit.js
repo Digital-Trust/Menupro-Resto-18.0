@@ -34,7 +34,120 @@ patch(FloorScreen.prototype, {
             potentialLink: null,
         });
 
+        this.setupFloatingOrderMonitoring();
+    },
 
+    setupFloatingOrderMonitoring() {
+        this.floatingOrderInterval = setInterval(() => {
+            this.checkFloatingOrderChanges();
+        }, 2000);
+    },
+
+    checkFloatingOrderChanges() {
+        try {
+            const floatingOrders = this.pos.models["pos.order"].filter(
+                (order) => this.isFloatingOrder(order) && !order.finalized
+            );
+
+            for (const order of floatingOrders) {
+                if (this.hasFloatingOrderChanged(order)) {
+                    this.playSound('/custom_module/static/src/sounds/bell.wav');
+                    this.updateFloatingOrderChangeTracking(order);
+
+                    // Optionnel : Notification visuelle
+                    this.showFloatingOrderNotification(order);
+                }
+            }
+        } catch (error) {
+            console.warn("Erreur lors de la vérification des ordres flottants:", error);
+        }
+    },
+
+    isFloatingOrder(order) {
+        return order.takeaway &&
+               !order.table_id &&
+               order.floating_order_name &&
+               (order.pos_reference?.includes('Self-Order') || order.origine === 'mobile');
+    },
+
+    hasFloatingOrderChanged(order) {
+        if (order.lastFloatingChangeCount === undefined) {
+            order.lastFloatingChangeCount = 0;
+        }
+        if (order.lastFloatingLinesLength === undefined) {
+            order.lastFloatingLinesLength = 0;
+        }
+        if (order.lastFloatingAmount === undefined) {
+            order.lastFloatingAmount = order.amount_total || 0;
+        }
+
+        const currentChanges = this.calculateFloatingOrderChanges(order);
+        const linesChanged = order.lines.length !== order.lastFloatingLinesLength;
+        const amountChanged = Math.abs((order.amount_total || 0) - order.lastFloatingAmount) > 0.01;
+
+        return currentChanges !== order.lastFloatingChangeCount ||
+               linesChanged ||
+               amountChanged;
+    },
+
+    calculateFloatingOrderChanges(order) {
+        let changes = 0;
+
+        for (const line of order.lines) {
+            if (line.lastChangeCount === undefined) {
+                line.lastChangeCount = 0;
+            }
+
+            const lineChanges = this.calculateLineChanges(line);
+            if (lineChanges !== line.lastChangeCount) {
+                changes++;
+                line.lastChangeCount = lineChanges;
+            }
+        }
+
+        if (order.mobile_user_id && order.subscription_id) {
+            changes++;
+        }
+
+        return changes;
+    },
+
+    calculateLineChanges(line) {
+        let changes = 0;
+
+        if (line.qty !== (line.lastQty || 0)) {
+            changes++;
+            line.lastQty = line.qty;
+        }
+
+        if (Math.abs(line.price_subtotal - (line.lastPrice || 0)) > 0.01) {
+            changes++;
+            line.lastPrice = line.price_subtotal;
+        }
+
+        if (line.note !== (line.lastNote || '')) {
+            changes++;
+            line.lastNote = line.note;
+        }
+
+        return changes;
+    },
+
+    updateFloatingOrderChangeTracking(order) {
+        order.lastFloatingChangeCount = this.calculateFloatingOrderChanges(order);
+        order.lastFloatingLinesLength = order.lines.length;
+        order.lastFloatingAmount = order.amount_total || 0;
+
+    },
+
+    showFloatingOrderNotification(order) {
+        if (this.env.services.notification) {
+            this.env.services.notification.add(
+                `🆕 Mise à jour de l'ordre flottant: ${order.floating_order_name}`,
+                3000,
+                { type: "info" }
+            );
+        }
     },
 
     selectFloor(floor) {
@@ -58,7 +171,6 @@ patch(FloorScreen.prototype, {
         this.state.selectedFloorId = Number(floorId);
 
         this.unselectTables();
-
     },
 
     getChangeCount(table) {
@@ -89,22 +201,26 @@ patch(FloorScreen.prototype, {
         return result;
     },
 
-
-
+    destroy() {
+        if (this.floatingOrderInterval) {
+            clearInterval(this.floatingOrderInterval);
+        }
+        super.destroy();
+    },
 
     playSound(soundFile) {
         fetch(soundFile, { method: 'HEAD' })
             .then(response => {
                 if (response.ok) {
                     const audio = new Audio(soundFile);
-                    audio.muted = true;
-                    audio.play().then(() => {
-                        audio.muted = false;
-                        audio.play().catch(error => {
-                            console.log('Error playing sound after unmuting:', error);
-                        });
-                    }).catch(error => {
-                        alert("Activez le son sur ce site pour entendre les notifications.");
+                    audio.volume = 1.0;
+
+                    audio.play().catch(error => {
+                        document.addEventListener('click', () => {
+                            audio.play().catch(err => {
+                                console.log('Still cannot play sound after user interaction:', err);
+                            });
+                        }, { once: true });
                     });
                 } else {
                     console.log(`Sound file not accessible: ${soundFile}`);
@@ -113,6 +229,21 @@ patch(FloorScreen.prototype, {
             .catch(error => {
                 console.log('Error fetching sound file:', error);
             });
-    }
+    },
 
+    getFloorChangeCount(floor) {
+        let changeCount = 0;
+        if (!floor) {
+            return changeCount;
+        }
+        const table_ids = floor.table_ids;
+
+        for (const table of table_ids) {
+            const tableChange = this.getChangeCount(table);
+            if (tableChange && typeof tableChange.changes === "number") {
+                changeCount += tableChange.changes;
+            }
+        }
+        return changeCount;
+    }
 });

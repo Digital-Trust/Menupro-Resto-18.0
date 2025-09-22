@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+    
+    <!-- 🚨 OVERRIDE : PaymentScreenMethods avec présélection pour paid_online -->
+    <t t-name="point_of_sale.PaymentScreenMethods" t-inherit="point_of_sale.PaymentScreenMethods" t-inherit-mode="extension">
+        <xpath expr="//div[@class='paymentmethods-container mb-3']" position="inside">
+            <!-- 🚨 AJOUT : Indicateur pour commandes payées en ligne -->
+            <div t-if="currentOrder and currentOrder.paid_online" 
+                 class="alert alert-info mb-2 d-flex align-items-center gap-2">
+                <i class="fa fa-credit-card text-primary"></i>
+                <span class="fw-bold">Commande payée en ligne - Seule la méthode "Online Menupro" est disponible</span>
+            </div>
+            <!-- 🚨 AJOUT : Indicateur pour commandes normales -->
+            <div t-elif="currentOrder and !currentOrder.paid_online" 
+                 class="alert alert-warning mb-2 d-flex align-items-center gap-2">
+                <i class="fa fa-shopping-cart text-warning"></i>
+                <span class="fw-bold">Commande normale - La méthode "Online Menupro" est réservée aux commandes payées en ligne</span>
+            </div>
+        </xpath>
+        
+        <!-- 🚨 MODIFICATION : Désactiver les méthodes selon le statut paid_online -->
+        <xpath expr="//div[@class='button paymentmethod btn btn-light btn-lg lh-lg flex-fill']" position="attributes">
+            <attribute name="t-att-class">{
+                'opacity-50': this.pos.paymentTerminalInProgress and paymentMethod and paymentMethod.use_payment_terminal,
+                'btn-success border-success': currentOrder and currentOrder.paid_online and paymentMethod and paymentMethod.name === 'Online Menupro',
+                'btn-outline-secondary opacity-25': (currentOrder and currentOrder.paid_online and paymentMethod and paymentMethod.name !== 'Online Menupro') or (currentOrder and !currentOrder.paid_online and paymentMethod and paymentMethod.name === 'Online Menupro'),
+                'bg-light': !currentOrder or !paymentMethod
+            }</attribute>
+            <attribute name="t-att-style">{
+                'cursor: not-allowed; pointer-events: none;': (currentOrder and currentOrder.paid_online and paymentMethod and paymentMethod.name !== 'Online Menupro') or (currentOrder and !currentOrder.paid_online and paymentMethod and paymentMethod.name === 'Online Menupro')
+            }</attribute>
+        </xpath>
+        
+        <!-- 🚨 MODIFICATION : Ajouter un indicateur visuel selon le statut paid_online -->
+        <xpath expr="//div[@class='payment-method-display d-flex align-items-center gap-2 text-wrap text-start lh-sm']" position="inside">
+            <!-- Badge "Disponible" pour Online Menupro quand paid_online = true -->
+            <span t-if="currentOrder and currentOrder.paid_online and paymentMethod and paymentMethod.name === 'Online Menupro'" 
+                  class="badge bg-light text-success ms-auto">
+                <i class="fa fa-check"></i> Disponible
+            </span>
+            <!-- Badge "Désactivé" pour Online Menupro quand paid_online = false -->
+            <span t-elif="currentOrder and !currentOrder.paid_online and paymentMethod and paymentMethod.name === 'Online Menupro'" 
+                  class="badge bg-secondary ms-auto">
+                <i class="fa fa-lock"></i> Réservé aux commandes en ligne
+            </span>
+            <!-- Badge "Désactivé" pour les autres méthodes quand paid_online = true -->
+            <span t-elif="currentOrder and currentOrder.paid_online and paymentMethod and paymentMethod.name !== 'Online Menupro'" 
+                  class="badge bg-secondary ms-auto">
+                <i class="fa fa-lock"></i> Désactivé
+            </span>
+        </xpath>
+    </t>
+
+</templates>

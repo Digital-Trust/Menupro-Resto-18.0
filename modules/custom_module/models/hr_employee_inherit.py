@@ -15,9 +15,16 @@ class HrEmployee(models.Model):
         groups="point_of_sale.group_pos_user"
     )
 
+    can_manage_takeaway_orders = fields.Boolean(
+        string="Peut gérer les commandes à emporter",
+        default=True,
+        tracking=True
+    )
+
     def _load_pos_data_fields(self, pos_config_id):
-        logger.info("=======================================================================================Test Deploy====================================================")
         fields = super()._load_pos_data_fields(pos_config_id)
         if 'allowed_floor_ids' not in fields:
             fields.append('allowed_floor_ids')
+        if 'can_manage_takeaway_orders' not in fields:
+            fields.append('can_manage_takeaway_orders')
         return fields

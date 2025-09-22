@@ -57,7 +57,7 @@ patch(PosStore.prototype, {
             ticket_number: order.ticket_number,
             takeaway: order.config.takeaway && order.takeaway,
             employee_name: currentCashier.name || order.employee_id?.name,
-            employee_name: order.employee_id?.name || order.user_id?.name,
+           //employee_name: order.employee_id?.name || order.user_id?.name,
             order_note: order.general_note,
             diningModeUpdate: diningModeUpdate,
         };

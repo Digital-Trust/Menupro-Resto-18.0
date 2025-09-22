@@ -5,6 +5,7 @@
     'installable': True,
     'category': 'Menupro',
     'application': True,
+    'license': 'LGPL-3',
     'depends': ['base', 'web','pos_self_order', 'point_of_sale', 'base_import', 'pos_restaurant','bus', 'pos_hr','hr', 'pos_discount','mrp'],
     'data': [
         #'security/ir.model.access.csv',
@@ -65,7 +66,13 @@
                 'custom_module/static/src/js/closing_popup_inherit.js',
                 'custom_module/static/src/js/error_handlers_inherit.js',
                 'custom_module/static/src/js/order_tabs_inherit.js',
-                'custom_module/static/src/js/numpad_inherit.js'
+                'custom_module/static/src/js/numpad_inherit.js',
+                'custom_module/static/src/js/payment_screen_inherit.js',
+                'custom_module/static/src/xml/payment_screen_inherit.xml',
+                'custom_module/static/src/js/product_card_inherit.js',
+                'custom_module/static/src/js/orderline_inherit.js',
+
+
             ],
     },
     'images': [
