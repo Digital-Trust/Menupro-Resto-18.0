@@ -5,6 +5,7 @@
     'installable': True,
     'category': 'Menupro',
     'application': True,
+    'license': 'LGPL-3',
     'depends': ['base', 'web','pos_self_order', 'point_of_sale', 'base_import', 'pos_restaurant','bus', 'pos_hr','hr', 'pos_discount','mrp'],
     'data': [
         #'security/ir.model.access.csv',

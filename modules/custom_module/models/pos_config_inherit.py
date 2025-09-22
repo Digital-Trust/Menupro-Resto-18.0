@@ -1,9 +1,9 @@
 import requests
-import datetime
-
+from datetime import datetime
 from odoo import models, api, fields, tools
 import logging
 from odoo.exceptions import UserError
+import pytz
 
 _logger = logging.getLogger(__name__)
 
@@ -210,3 +210,6 @@ class PosConfig(models.Model):
                     _logger.error("Échec sync suppression POS Config %s → %s", rec.id, e)
 
         return super().unlink()
+
+
+

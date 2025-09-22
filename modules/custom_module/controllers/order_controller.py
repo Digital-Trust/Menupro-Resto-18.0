@@ -664,3 +664,63 @@ class OrderController(PosSelfOrderController):
         except Exception as e:
             _logger.exception("Error processing mobile order: %s", str(e))
             return http.Response(json.dumps({"error": str(e)}), content_type='application/json', status=500)
+
+
+
+    @http.route('/update_print_url', type='http', auth='public', methods=['POST'], csrf=False)
+    def update_print_url(self, **kwargs):
+            _logger.info('******************* update_print_url **************')
+            try:
+                # Récupération et parsing du body
+                raw_data = request.httprequest.data
+                data = json.loads(raw_data.decode('utf-8')) if raw_data else {}
+
+                url = data.get('url', "")
+                if not url:
+                    return http.Response(
+                        json.dumps({"error": "Invalid url"}),
+                        content_type='application/json', status=400
+                    )
+
+                # 🔥 Mise à jour du paramètre système
+                request.env['ir.config_parameter'].sudo().set_param('print_url', url)
+
+                message = {"message": "successful update printing url", "url": url}
+                return http.Response(
+                    json.dumps(message),
+                    content_type='application/json',
+                    status=200
+                )
+
+            except Exception as e:
+                _logger.exception("Error processing update printing url: %s", str(e))
+                return http.Response(
+                    json.dumps({"error": str(e)}),
+                    content_type='application/json',
+                    status=500
+                )
+
+    @http.route('/get_print_url', type='http', auth='public', methods=['GET'], csrf=False)
+    def get_print_url(self, **kwargs):
+        try:
+            print_url = request.env['ir.config_parameter'].sudo().get_param('print_url')
+            if print_url:
+                return http.Response(
+                    json.dumps({"print_url": print_url}),
+                    content_type='application/json',
+                    status=200
+                )
+            else:
+                return http.Response(
+                    json.dumps({"print_url": None}),
+                    content_type='application/json',
+                    status=200
+                )
+        except Exception as e:
+            _logger.exception("Error retrieving print_url: %s", str(e))
+            return http.Response(
+                json.dumps({"error": str(e)}),
+                content_type='application/json',
+                status=500
+            )
+

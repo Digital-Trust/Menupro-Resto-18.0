@@ -24,29 +24,51 @@ patch(HWPrinter.prototype, {
     },
     async sendAction(data) {
         try {
-             const isOnline = await this.checkServerReachability();
+            const isOnline = await this.checkServerReachability();
             if (!isOnline) {
-                console.log("offLine Help")
+                console.log("offLine Help");
                 return true;
             }
-            const publicIP = await getPublicIP();
+
+            // 👉 D'abord vérifier si print_url existe côté serveur
+            let printUrl = null;
+            try {
+                const res = await fetch('/get_print_url');
+                if (res.ok) {
+                    const json = await res.json();
+                    printUrl = json.print_url;
+                }
+            } catch (err) {
+                console.warn("Impossible de récupérer print_url, fallback sur IP publique");
+            }
+
+            // 👉 Si print_url non défini, fallback sur getPublicIP()
+            let finalUrl = printUrl;
+            if (!finalUrl) {
+                const publicIP = await getPublicIP();
+                finalUrl = publicIP;
+            }
+
+            // Envoi des données
             const response = await fetch('/custom_module/public_ip', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({...data, 'public_ip': publicIP }),
+                body: JSON.stringify({ ...data, 'public_ip': finalUrl }),
             });
 
             if (!response.ok) {
-                console.error('Failed to fetch public_ip:', response.statusText);
+                console.error('Failed to send public_ip:', response.statusText);
             }
-            return true
+            return true;
+
         } catch (error) {
-            console.error('Erreur de l\'impression:', error);
+            console.error("Erreur de l'impression:", error);
             throw error;
         }
     },
+
     async sendPrintingJob(img) {
         let adress = this.url;
         let printerIp = adress.split('//')[1].split(':')[0];
