@@ -105,6 +105,7 @@ patch(ProductScreen.prototype, {
             {
                 ...BACKSPACE,
                 disabled: isTakeaway
+
             },
         ]).map((button) => ({
             ...button,
