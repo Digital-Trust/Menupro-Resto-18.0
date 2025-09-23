@@ -192,7 +192,6 @@ class PosSession(models.Model):
         return response
 
     def delete_opening_control_session(self):
-        print("in delete_opening_control_session")
         self.ensure_one()
         if not self.exists():
             return {
@@ -296,7 +295,6 @@ class PosSession(models.Model):
 
     @api.constrains('config_id')
     def _check_pos_config(self):
-        print(" in _check_pos_config")
         onboarding_creation = self.env.context.get('onboarding_creation', False)
         if not onboarding_creation and self.search_count([
                 ('state', '!=', 'closed'),
@@ -307,7 +305,6 @@ class PosSession(models.Model):
 
     @api.constrains('start_at')
     def _check_start_date(self):
-        print("in _check_start_date")
         for record in self:
             journal = record.config_id.journal_id
             company = journal.company_id
@@ -359,7 +356,6 @@ class PosSession(models.Model):
         else:
             sessions = super().create(vals_list)
         sessions.action_pos_session_open()
-        print("sessions",sessions)
 
         return sessions
 
@@ -381,7 +377,6 @@ class PosSession(models.Model):
         return self.env['ir.sequence'].next_by_code(code)
 
     def action_pos_session_open(self):
-        print("here in action_pos_session_open")
         # we only open sessions that haven't already been opened
         for session in self.filtered(lambda session: session.state == 'opening_control'):
             values = {}
@@ -1680,7 +1675,6 @@ class PosSession(models.Model):
         return self.config_id.open_ui()
 
     def set_opening_control(self, cashbox_value: int, notes: str):
-        print('in set_opening_control')
         if self.state != 'opening_control':
             return
         self.state = 'opened'

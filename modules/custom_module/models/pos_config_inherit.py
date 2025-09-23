@@ -20,7 +20,7 @@ class PosConfig(models.Model):
 
         ICParam = self.env['ir.config_parameter'].sudo()
         cfg = {
-            'pos-config_url': tools.config.get('pos_config_url'),
+            'pos_config_url': tools.config.get('pos_config_url'),
             'secret_key': tools.config.get('secret_key'),
             'odoo_secret_key': tools.config.get('odoo_secret_key'),
             'restaurant_id': ICParam.get_param('restaurant_id'),
@@ -165,7 +165,7 @@ class PosConfig(models.Model):
     def create(self, vals_list):
         records = super().create(vals_list)
         cfg = self._get_config()
-        base = cfg['pos-config_url']
+        base = cfg['pos_config_url']
 
         for rec in records:
             try:
@@ -179,7 +179,7 @@ class PosConfig(models.Model):
     def write(self, vals):
         res = super().write(vals)
         cfg = self._get_config()
-        base = cfg['pos-config_url']
+        base = cfg['pos_config_url']
         print("vals=>",vals)
         print("self=========+++>",self)
 
@@ -198,7 +198,7 @@ class PosConfig(models.Model):
 
     def unlink(self):
         cfg = self._get_config()
-        base = cfg['pos-config_url']
+        base = cfg['pos_config_url']
 
 
         for rec in self:
