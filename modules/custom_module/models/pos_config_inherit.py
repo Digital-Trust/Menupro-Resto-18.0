@@ -180,8 +180,6 @@ class PosConfig(models.Model):
         res = super().write(vals)
         cfg = self._get_config()
         base = cfg['pos_config_url']
-        print("vals=>",vals)
-        print("self=========+++>",self)
 
         for rec in self:
             if rec.menuproId:  # déjà créé côté MenuPro → update
