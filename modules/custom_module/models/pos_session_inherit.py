@@ -16,20 +16,37 @@ class PosSession(models.Model):
         result.append('ticket_number')
         return result
 
-    def _close_session_action(self, amount_to_balance):
+    #Not used
+    # def _close_session_action(self, amount_to_balance):
+    #     installed_modules = self.env['ir.module.module'].sudo().search([
+    #         ('name', 'in', ['mrp', 'stock']),
+    #         ('state', '=', 'installed')
+    #     ])
+    #
+    #     installed_modules_names = installed_modules.mapped('name')
+    #     print('installed_modules_names',installed_modules_names)
+    #
+    #
+    #     if 'mrp' in installed_modules_names and 'stock' in installed_modules_names:
+    #         self._decrement_bom_components()
+    #     self.write({'state': 'closed'})
+    #     return super(PosSession, self)._close_session_action(amount_to_balance)
+
+    def close_session_from_ui(self, bank_payment_method_diff_pairs=None):
         installed_modules = self.env['ir.module.module'].sudo().search([
             ('name', 'in', ['mrp', 'stock']),
             ('state', '=', 'installed')
         ])
 
         installed_modules_names = installed_modules.mapped('name')
-        # print('installed_modules_names',installed_modules_names)
+        print('installed_modules_names',installed_modules_names)
 
 
         if 'mrp' in installed_modules_names and 'stock' in installed_modules_names:
             self._decrement_bom_components()
         self.write({'state': 'closed'})
-        return super(PosSession, self)._close_session_action(amount_to_balance)
+        return super(PosSession, self).close_session_from_ui(bank_payment_method_diff_pairs)
+
 
     def _decrement_component_stock(self, component, qty_to_deduct, warnings):
         """
@@ -109,15 +126,13 @@ class PosSession(models.Model):
     def process_bom_recursively(self, product, quantity, warnings, override_location=None):
         """
         Recursively process the BOM and decrement the stock of components at all levels.
-
-        Si le produit final a un emplacement préféré, tous les composants seront
-        prélevés de cet emplacement, ignorant leurs propres emplacements préférés.
         """
         # For the first call (final product), check if it has a preferred location
         if override_location is None:
             final_product_location = product.product_tmpl_id.pos_preferred_location_id
             if final_product_location:
                 override_location = final_product_location
+                print("final_product_location", final_product_location)
                 _logger.info(
                     f"Produit final {product.name} a un emplacement préféré: {override_location.name}. "
                     f"Utilisation prioritaire de cet emplacement pour tous les composants."
@@ -150,19 +165,21 @@ class PosSession(models.Model):
                     self.process_bom_recursively(component, qty_to_deduct, warnings, override_location)
                 else:
                     # Basic component, deduction from stock
+                    _logger.info(
+                        f"DÉBOGAGE: Composant de base {component.name}, override_location = {override_location.name if override_location else 'None'}")
+
                     if override_location:
                         # If a priority location(override_location) exists (of the final product), use it
                         _logger.info(
-                            f"Utilisation de l'emplacement prioritaire {override_location.name} pour le composant {component.name}"
+                            f"APPEL _decrement_from_specific_location pour {component.name} dans {override_location.name}"
                         )
                         self._decrement_from_specific_location(component, qty_to_deduct, override_location, warnings)
                     else:
                         # Else,use normal logic with the preferred component location
                         _logger.info(
-                            f"Aucun emplacement prioritaire, utilisation de l'emplacement préféré du composant {component.name}"
+                            f"APPEL _decrement_component_stock pour {component.name}"
                         )
                         self._decrement_component_stock(component, qty_to_deduct, warnings)
-
     def _decrement_from_specific_location(self, component, qty_to_deduct, location, warnings):
         """
         Décrémenter le stock d'un composant depuis un emplacement spécifique.
@@ -189,6 +206,7 @@ class PosSession(models.Model):
         """
         Main method to decrement components from BOM.
         """
+        print("here in _decrement_bom_components")
         self.ensure_one()
         warnings = []
 
@@ -198,6 +216,8 @@ class PosSession(models.Model):
                 _logger.info(
                     f"Pour le produit {product.name} (type: {product.type}) avec quantité {line.qty}"
                 )
+
+                # Récupérer l'emplacement préféré du produit final
                 product_location = product.product_tmpl_id.pos_preferred_location_id
                 if product_location:
                     _logger.info(
@@ -207,7 +227,9 @@ class PosSession(models.Model):
                     _logger.info(
                         f"Le produit {product.name} n'a pas d'emplacement préféré défini"
                     )
-                self.process_bom_recursively(product, line.qty, warnings, override_location=None)
+
+                # Passer l'emplacement préféré du produit final comme override_location
+                self.process_bom_recursively(product, line.qty, warnings, override_location=product_location)
 
         if warnings:
             warning_message = "Avertissements de stock :\n\n" + "\n".join(warnings)
@@ -453,6 +475,8 @@ class PosSession(models.Model):
                 component = req_data['component']
                 qty_required = req_data['qty']
                 override_location = req_data.get('location')
+                print("le composant ",component.name)
+                print("Emplacement",override_location.name)
 
                 if override_location:
                     # Check in the final product location
