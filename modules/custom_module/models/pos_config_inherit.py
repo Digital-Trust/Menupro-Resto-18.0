@@ -12,6 +12,7 @@ class PosConfig(models.Model):
 
     menuproId = fields.Char(string="MenuPro ID", copy=False)
 
+
     # # ---------------- CONFIG ---------------- #
     # def _get_config(self):
     #     """Charge et valide la config une seule fois par thread."""
@@ -161,6 +162,7 @@ class PosConfig(models.Model):
         )
 
     # ---------------- CRUD OVERRIDES ---------------- #
+
     # @api.model_create_multi
     # def create(self, vals_list):
     #     records = super().create(vals_list)
