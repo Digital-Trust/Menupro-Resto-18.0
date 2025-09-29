@@ -1,2 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_table_tags,access.table.tags,model_table_tags,base.group_user,1,1,1,1
+access_restaurant_discount_config_admin,access.restaurant.discount.config.admin,model_restaurant_discount_config,base.group_system,1,1,1,1
+access_restaurant_discount_config_manager,access.restaurant.discount.config.manager,model_restaurant_discount_config,point_of_sale.group_pos_manager,1,1,1,1
+access_restaurant_discount_config_user,access.restaurant.discount.config.user,model_restaurant_discount_config,point_of_sale.group_pos_user,0,0,0,0
