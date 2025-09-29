@@ -8,8 +8,8 @@
     'license': 'LGPL-3',
     'depends': ['base', 'web','pos_self_order', 'point_of_sale', 'base_import', 'pos_restaurant','bus', 'pos_hr','hr', 'pos_discount','mrp'],
     'data': [
-        #'security/ir.model.access.csv',
-         'views/login_layout.xml',
+        'security/ir.model.access.csv',
+        'views/login_layout.xml',
         # Category module
         'views/categories/list_pos_category.xml',
         'views/categories/upsert_pos_category.xml',

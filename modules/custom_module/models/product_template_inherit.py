@@ -109,6 +109,7 @@ class ProductTemplate(models.Model):
         return {"status_code": status_code, "response_data": response_data}
 
     def write(self, vals):
+        print("in write product vals :", vals)
         res = super(ProductTemplate, self).write(vals)
         for product in self:
             if product.is_storable is True:
@@ -125,6 +126,7 @@ class ProductTemplate(models.Model):
 
     def _create_or_update_menupro_menu(self, product):
         # Get data
+
         data = self.prepare_data(product)
         odoo_secret_key = tools.config.get("odoo_secret_key")
 
@@ -148,6 +150,16 @@ class ProductTemplate(models.Model):
 
             # Call API to update menu in MenuPro
             response = requests.patch(api_url, json=data,  headers={'x-odoo-key': odoo_secret_key})
+            # print("resp update menupro ---->", response)  # juste le code
+            # print("Status code:", response.status_code)  # code HTTP (400)
+            # print("Reason:", response.reason)  # message court
+            # print("Text:", response.text)  # réponse brute du serveur
+            # print("JSON:",
+            #       response.json() if response.headers.get('Content-Type') == 'application/json' else "Not JSON")
+            # print("Request URL:", response.request.url)  # URL appelée
+            # print("Request body:", response.request.body)  # ce que tu envoies
+            # print("Request headers:", response.request.headers)  # headers envoyés
+
             if response.status_code != 200:
                 return "There is a problem while updating Menupro Menu"
 
