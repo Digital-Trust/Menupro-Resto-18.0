@@ -72,7 +72,11 @@ class ProductTemplate(models.Model):
 
             if non_consu_products:
                 for product_vals in non_consu_products:
-                    self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                    # Check if product has pos_category with menupro_id before creating in MenuPro
+                    if self._should_create_in_menupro_for_create(product_vals):
+                        self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                    else:
+                        print(f"Skipping MenuPro creation for product {product_vals.get('name', 'Unknown')} - no valid pos_category with menupro_id")
                 created_records += super(ProductTemplate, self).create(non_consu_products)
 
             return created_records
@@ -81,9 +85,39 @@ class ProductTemplate(models.Model):
             # Create only in Odoo
             return super(ProductTemplate, self).create(vals)
 
-        # Otherwise, create in both MenuPro and Odoo
-        self._process_single_product(vals)
+        # Check if product has pos_category with menupro_id before creating in MenuPro
+        if self._should_create_in_menupro_for_create(vals):
+            # Otherwise, create in both MenuPro and Odoo
+            self._process_single_product(vals)
+        else:
+            print(f"Skipping MenuPro creation for product {vals.get('name', 'Unknown')} - no valid pos_category with menupro_id")
         return super(ProductTemplate, self).create(vals)
+
+    def _should_create_in_menupro_for_create(self, vals):
+        """ Check if product should be created in MenuPro based on pos_category menupro_id """
+        # Get pos_category from vals
+        pos_categ_ids = vals.get('pos_categ_ids')
+        if not pos_categ_ids:
+            print("No pos_category specified - skipping MenuPro creation")
+            return False
+        
+        # Handle both single ID and list of IDs
+        if isinstance(pos_categ_ids, list):
+            pos_categ_ids = pos_categ_ids[0][2] if pos_categ_ids[0][0] == 6 else [pos_categ_ids[0][1]]
+        elif isinstance(pos_categ_ids, tuple):
+            pos_categ_ids = [pos_categ_ids[0][1]]
+        else:
+            pos_categ_ids = [pos_categ_ids]
+        
+        # Check if any pos_category has menupro_id
+        for pos_categ_id in pos_categ_ids:
+            pos_category = self.env['pos.category'].browse(pos_categ_id)
+            if pos_category.exists() and pos_category.menupro_id:
+                print(f"Found pos_category {pos_category.name} with menupro_id {pos_category.menupro_id} - proceeding with MenuPro creation")
+                return True
+        
+        print("No pos_category with menupro_id found - skipping MenuPro creation")
+        return False
 
     def _process_single_product(self, vals):
         """Helper method to process a single product creation."""
@@ -114,7 +148,14 @@ class ProductTemplate(models.Model):
         for product in self:
             if product.is_storable is True:
                 continue
-            self._create_or_update_menupro_menu(product)
+            
+            # Check if product needs to be created in MenuPro during update
+            if not product.menupro_id and self._should_create_in_menupro_for_update(product):
+                print(f"Product {product.name} has no menupro_id but has valid pos_category - creating in MenuPro")
+                self._create_product_in_menupro(product)
+            else:
+                # Normal update flow
+                self._create_or_update_menupro_menu(product)
 
         # If image_1920 is updated, upload the new image to S3 and update MenuPro
         # if 'image_1920' in vals and vals["image_1920"]:
@@ -124,9 +165,51 @@ class ProductTemplate(models.Model):
         _logger.info(f'\033[92mSuccessfully updated the menu with vals {vals} in MenuPro and Odoo Servers\033[0m')  # Green
         return res
 
+    def _should_create_in_menupro_for_update(self, product):
+        """ Check if product should be created in MenuPro during update (no menupro_id but has pos_category) """
+        if not product.pos_categ_ids:
+            print(f"Product {product.name} has no pos_category - skipping MenuPro creation")
+            return False
+        
+        # Check if any pos_category has menupro_id
+        for pos_category in product.pos_categ_ids:
+            if pos_category.menupro_id:
+                print(f"Found pos_category {pos_category.name} with menupro_id {pos_category.menupro_id} - will create in MenuPro")
+                return True
+        
+        print(f"Product {product.name} has pos_category but none have menupro_id - skipping MenuPro creation")
+        return False
+
+    def _create_product_in_menupro(self, product):
+        """ Create product in MenuPro during update """
+        try:
+            api_url = tools.config.get("menu_url")
+            odoo_secret_key = tools.config.get("odoo_secret_key")
+            if not odoo_secret_key:
+                _logger.error("odoo_secret_key missing")
+                return
+
+            # Prepare data for MenuPro
+            data = self.prepare_data(product)
+            response = requests.post(api_url, json=data, headers={'x-odoo-key': odoo_secret_key})
+            
+            if response.status_code in [200, 201]:
+                response_data = response.json()
+                menupro_id = response_data.get('id')
+                if menupro_id:
+                    product.write({'menupro_id': menupro_id})
+                    print(f"Successfully created product {product.name} in MenuPro with ID: {menupro_id}")
+                else:
+                    print(f"Failed to get menupro_id from response for product {product.name}")
+            else:
+                print(f"Failed to create product {product.name} in MenuPro. Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            _logger.error(f"Error creating product {product.name} in MenuPro: {e}")
+            print(f"Error creating product {product.name} in MenuPro: {e}")
+
     def _create_or_update_menupro_menu(self, product):
         # Get data
-
         data = self.prepare_data(product)
         odoo_secret_key = tools.config.get("odoo_secret_key")
 
