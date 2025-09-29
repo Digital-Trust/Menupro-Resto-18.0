@@ -141,22 +141,6 @@ class PosConfig(models.Model):
     #         _logger.warning("MenuPro %s %s failed → %s", method, url, e)
     #         raise
 
-
-    # ---------------- API CALL ---------------- #
-    def _call_mp(self, method, url, json=None):
-        cfg = self._get_config()
-        headers = {
-            "x-secret-key": cfg['secret_key'],
-            "x-odoo-secret-key": cfg['odoo_secret_key'],
-        }
-        try:
-            resp = requests.request(method, url, json=json, headers=headers, timeout=10)
-            resp.raise_for_status()
-            return resp.json() if resp.text else {}
-        except Exception as e:
-            _logger.warning("MenuPro %s %s failed → %s", method, url, e)
-            raise
-
     # ---------------- LOAD EXTRA MODELS ---------------- #
     def _pos_ui_models_to_load(self):
         result = super()._pos_ui_models_to_load()

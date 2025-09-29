@@ -72,7 +72,7 @@
 
     <menuitem id="menu_restaurant_discount_root"
               name="Remises QR Mobile"
-              parent="point_of_sale.menu_point_root"
+              parent="point_of_sale.menu_point_of_sale"
               sequence="50"/>
 
     <menuitem id="menu_restaurant_discount_config"
