@@ -1,6 +1,9 @@
 from odoo import models, fields, api, tools
 import requests
+import logging
 from ..utils import image_utils
+
+_logger = logging.getLogger(__name__)
 
 
 class PosCategory(models.Model):
@@ -38,13 +41,15 @@ class PosCategory(models.Model):
         try:
             get_category_by_id = tools.config.get('get_category_by_id_url')
             if get_category_by_id is None:
-                return "There is no get_category_by_id_url in Config"
+                _logger.error("There is no get_category_by_id_url in Config")
+                return None
 
             response = requests.get(get_category_by_id + str(category_id))
             response.raise_for_status()
             return response.json()
 
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Error fetching category data: {e}")
             return None
 
     def create_pos_category(self, vals_list):
@@ -121,7 +126,12 @@ class PosCategory(models.Model):
             ('menupro_id', '=', pos_category.menupro_id)
         ], limit=1)
         
-        if not existing_product_category and pos_category.menupro_id:
+        # Check if product category already exists with same name
+        existing_product_category_by_name = self.env['product.category'].search([
+            ('name', '=', pos_category.name)
+        ], limit=1)
+        
+        if not existing_product_category and not existing_product_category_by_name and pos_category.menupro_id:
             # Create new product category with context to avoid infinite loop
             product_category_vals = {
                 'name': pos_category.name,
@@ -130,6 +140,11 @@ class PosCategory(models.Model):
                 'type_name': pos_category.type_name,
             }
             self.env['product.category'].with_context(skip_pos_sync=True).create(product_category_vals)
+            print(f"Created product category '{pos_category.name}' for POS category '{pos_category.name}'")
+        elif existing_product_category_by_name:
+            print(f"Product category with name '{pos_category.name}' already exists - skipping creation")
+        elif existing_product_category:
+            print(f"Product category with menupro_id '{pos_category.menupro_id}' already exists - skipping creation")
 
     def _update_corresponding_product_category(self, pos_category, vals):
         """ Update corresponding product category with same menupro_id """
