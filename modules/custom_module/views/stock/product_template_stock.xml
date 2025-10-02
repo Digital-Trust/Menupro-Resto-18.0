@@ -1,16 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
+    <!-- Vue pour désactiver l'auto-complétion des catégories -->
+    <record id="product_template_disable_category_creation" model="ir.ui.view">
+        <field name="name">product.template.disable.category.creation</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Désactiver l'auto-complétion "Créer" et "Créer et modifier" pour le champ categ_id -->
+            <field name="categ_id" position="attributes">
+                <attribute name="options">{'no_create': True, 'no_create_edit': True}</attribute>
+            </field>
+        </field>
+    </record>
+
+    <!-- Vue pour désactiver l'auto-complétion des catégories POS -->
+    <record id="product_template_disable_pos_category_creation" model="ir.ui.view">
+        <field name="name">product.template.disable.pos.category.creation</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="point_of_sale.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Désactiver l'auto-complétion "Créer" et "Créer et modifier" pour le champ pos_categ_ids -->
+            <field name="pos_categ_ids" position="attributes">
+                <attribute name="options">{'no_create': True, 'no_create_edit': True}</attribute>
+            </field>
+        </field>
+    </record>
+
+    <!-- Vue existante pour l'emplacement préféré avec désactivation de l'auto-complétion -->
     <record id="product_template_inherit" model="ir.ui.view">
         <field name="name">product.template.inherit</field>
         <field name="model">product.template</field>
         <field name="inherit_id" ref="product.product_template_only_form_view"/>
         <field name="arch" type="xml">
-
-
             <xpath expr="//page[@name='general_information']" position="inside">
-                <group name="pos_preferred_location_id" string="Localisation de l’enlèvement du produit depuis l'inventaire">
-                    <field name="pos_preferred_location_id"/>
+                <group name="pos_preferred_location_id" string="Localisation de l'enlèvement du produit depuis l'inventaire">
+                    <field name="pos_preferred_location_id" options="{'no_create': True, 'no_create_edit': True}"/>
                 </group>
             </xpath>
         </field>
