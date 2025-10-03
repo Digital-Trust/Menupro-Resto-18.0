@@ -80,4 +80,48 @@
               action="action_restaurant_discount_config"
               parent="menu_restaurant_discount_root"
               sequence="10"/>
+
+    <!-- Vue spécifique pour le code promo par défaut mobile -->
+    <record id="view_mobile_default_promo_form" model="ir.ui.view">
+        <field name="name">restaurant.discount.config.mobile.default.form</field>
+        <field name="model">restaurant.discount.config</field>
+        <field name="arch" type="xml">
+            <form string="Code Promo Mobile par Défaut">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="discount_name" placeholder="Nom de la remise..."/>
+                        </h1>
+                    </div>
+                    <group>
+                        <field name="restaurant_id" readonly="1"/>
+                        <field name="discount_code" readonly="1" string="Code Promo"/>
+                        <field name="enabled"/>
+                        <field name="discount_percentage" string="Remise (%)" help="Pourcentage de remise automatique pour les commandes mobile"/>
+                        <field name="min_amount" string="Montant minimum" help="Montant minimum pour appliquer la remise"/>
+                        <field name="max_discount" string="Plafond de remise" help="Montant maximum de remise (laisser 0 pour pas de plafond)"/>
+                    </group>
+                    <div class="alert alert-info" role="alert">
+                        <strong>Information :</strong> Ce code promo s'applique automatiquement à toutes les commandes passées via mobile self-order, sauf si un code promo spécifique est fourni.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mobile_default_promo" model="ir.actions.act_window">
+        <field name="name">Code Promo Mobile par Défaut</field>
+        <field name="res_model">restaurant.discount.config</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_mobile_default_promo_form"/>
+        <field name="domain">[('discount_code', '=', 'MOBILE_DEFAULT')]</field>
+        <field name="context">{'default_discount_code': 'MOBILE_DEFAULT', 'default_discount_name': 'Remise Mobile Self-Order', 'default_enabled': True, 'default_discount_percentage': 10.0}</field>
+        <field name="target">current</field>
+    </record>
+
+    <menuitem id="menu_mobile_default_promo"
+              name="Code Promo Mobile par Défaut"
+              action="action_mobile_default_promo"
+              parent="menu_restaurant_discount_root"
+              sequence="20"/>
 </odoo>

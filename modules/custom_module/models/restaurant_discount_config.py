@@ -158,6 +158,43 @@ class RestaurantDiscountConfig(models.Model):
             'max_discount': config.max_discount or None,
         }
 
+    @api.model
+    def get_default_mobile_promo_config(self, restaurant_id=None):
+        """
+        Récupère la configuration du code promo par défaut pour mobile self-order
+        
+        :param restaurant_id: ID du restaurant
+        :return: dict avec la configuration de remise par défaut pour mobile
+        """
+        cfg = self._get_config()
+        if not restaurant_id:
+            restaurant_id = cfg['restaurant_id']
+            
+        # Recherche du code promo par défaut pour mobile
+        config = self.search([
+            ('restaurant_id', '=', restaurant_id),
+            ('discount_code', '=', 'MOBILE_DEFAULT'),
+            ('enabled', '=', True)
+        ], limit=1)
+
+        if not config:
+            # Si pas de configuration trouvée, retourner une configuration par défaut
+            return {
+                'enabled': False,
+                'discount_percentage': 0.0,
+                'discount_name': 'Remise Mobile Self-Order',
+                'min_amount': 0.0,
+                'max_discount': None,
+            }
+
+        return {
+            'enabled': config.enabled,
+            'discount_percentage': config.discount_percentage,
+            'discount_name': config.discount_name,
+            'min_amount': config.min_amount,
+            'max_discount': config.max_discount or None,
+        }
+
     def _get_default_config(self):
         """Configuration par défaut si aucune configuration n'est trouvée"""
         return {
@@ -185,6 +222,41 @@ class RestaurantDiscountConfig(models.Model):
                 'max_discount': 0.0,
                 'discount_code': 'DEFAULT',
             })
+        return True
+
+    @api.model
+    def ensure_mobile_default_promo_exists(self, restaurant_id=None):
+        """
+        S'assure qu'un code promo par défaut pour mobile self-order existe
+        
+        :param restaurant_id: ID du restaurant
+        :return: True si la configuration existe ou a été créée
+        """
+        cfg = self._get_config()
+        if not restaurant_id:
+            restaurant_id = cfg['restaurant_id']
+        if not restaurant_id:
+            return False
+            
+        # Vérifier si le code promo mobile par défaut existe déjà
+        existing_mobile_config = self.search([
+            ('restaurant_id', '=', restaurant_id),
+            ('discount_code', '=', 'MOBILE_DEFAULT')
+        ], limit=1)
+        
+        if not existing_mobile_config:
+            # Créer le code promo par défaut pour mobile
+            self.create({
+                'restaurant_id': restaurant_id,
+                'enabled': True,  # Activé par défaut
+                'discount_percentage': 10.0,  # 10% de remise par défaut
+                'discount_name': 'Remise Mobile Self-Order',
+                'min_amount': 0.0,  # Pas de montant minimum
+                'max_discount': 0.0,  # Pas de plafond par défaut
+                'discount_code': 'MOBILE_DEFAULT',
+            })
+            _logger.info(f"Code promo par défaut mobile créé pour le restaurant {restaurant_id}")
+        
         return True
 
     @api.constrains('discount_percentage')
