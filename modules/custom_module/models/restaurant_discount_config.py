@@ -21,6 +21,7 @@ class RestaurantDiscountConfig(models.Model):
     min_amount = fields.Float(string='Montant minimum', default=0.0)
     max_discount = fields.Float(string='Remise maximum (€)', default=0.0)
     menupro_id = fields.Char(string='MenuPro ID')
+    is_mobile_default = fields.Boolean(string='Code promo mobile par défaut', default=False, help="Identifie le code promo par défaut pour les commandes mobile self-order")
 
 
     _sql_constraints = [
@@ -62,7 +63,7 @@ class RestaurantDiscountConfig(models.Model):
             "discountName": self.discount_name,
             "minAmount": self.min_amount,
             "maxDiscount": self.max_discount,
-
+            "isMobileDefault": self.is_mobile_default,
 
         }
 
@@ -89,6 +90,7 @@ class RestaurantDiscountConfig(models.Model):
         for vals in vals_list:
             if restaurant_id:
                 vals['restaurant_id'] = restaurant_id
+        
         records = super().create(vals_list)
         for record in records:
             try:
@@ -112,6 +114,7 @@ class RestaurantDiscountConfig(models.Model):
     def write(self, vals):
         if 'restaurant_id' in vals:
             del vals['restaurant_id']
+
 
         res = super().write(vals)
 
@@ -305,3 +308,22 @@ class RestaurantDiscountConfig(models.Model):
                 raise ValidationError("Le nom de la remise ne peut pas être vide.")
             if not re.search(r'\bremise\b', record.discount_name, re.IGNORECASE):
                 raise ValidationError("Le nom de la remise doit contenir le mot 'Remise'.")
+
+    @api.constrains('is_mobile_default')
+    def _check_single_mobile_default(self):
+        """Vérifie qu'il n'y a qu'un seul code promo mobile par défaut par restaurant"""
+        for record in self:
+            if record.is_mobile_default and record.restaurant_id:
+                # Chercher d'autres codes promo mobile par défaut pour le même restaurant
+                other_defaults = self.env['restaurant.discount.config'].search([
+                    ('restaurant_id', '=', record.restaurant_id),
+                    ('is_mobile_default', '=', True),
+                    ('id', '!=', record.id)
+                ])
+                
+                if other_defaults:
+                    raise ValidationError(
+                        f"Il ne peut y avoir qu'un seul code promo mobile par défaut par restaurant. "
+                        f"Le code '{other_defaults[0].discount_name}' est déjà configuré comme mobile par défaut."
+                    )
+
