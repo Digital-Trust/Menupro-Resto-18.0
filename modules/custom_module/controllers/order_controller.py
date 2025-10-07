@@ -410,7 +410,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"=== END DEBUG ===")
 
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
-                         mobile_user_id=None, subscription_id=None, paid_online=None, customer_name=None):
+                         mobile_user_id=None, subscription_id=None, paid_online=None, menupro_name=None):
         """
         Crée une nouvelle commande avec gestion des floatingOrder pour takeaway
         """
@@ -443,7 +443,7 @@ class OrderController(PosSelfOrderController):
         if takeaway:
             # Pour takeaway, créer une floating order (sans table)
             # Utiliser le nom du client s'il est fourni, sinon utiliser le format par défaut
-            floating_name = customer_name if customer_name else f"TKO-{sequence}"
+            floating_name = menupro_name if menupro_name else f"TKO-{sequence}"
             order_dict.update({
                 'table_id': False,
                 'takeaway': True,
@@ -465,7 +465,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"menupro_id à créer: {menupro_id}")
         _logger.info(f"takeaway: {takeaway}")
         _logger.info(f"paid_online: {paid_online}")
-        _logger.info(f"customer_name: {customer_name}")
+        _logger.info(f"menupro_name: {menupro_name}")
         _logger.info(f"table_id: {order_dict.get('table_id', 'None (Floating Order)')}")
         _logger.info(f"floating_order_name: {order_dict.get('floating_order_name', 'None')}")
         _logger.info(f"=== END CREATE DEBUG ===")
@@ -549,7 +549,7 @@ class OrderController(PosSelfOrderController):
             subscription_id = order_data.get('subscription_id')
             menupro_id = order_data.get('menupro_id')
             paid_online = order_data.get('paid_online', False)
-            customer_name = order_data.get('customer_name')
+            menupro_name = order_data.get('menupro_name')
 
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
@@ -559,7 +559,7 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"menupro_id reçu: {menupro_id}")
             _logger.info(f"takeaway reçu: {takeaway}")
             _logger.info(f"paid_online reçu: {paid_online}")
-            _logger.info(f"customer_name reçu: {customer_name}")
+            _logger.info(f"menupro_name reçu: {menupro_name}")
 
             # Validation des paramètres requis
             required_params = [pos_config_id, access_token]
@@ -696,7 +696,7 @@ class OrderController(PosSelfOrderController):
                     mobile_user_id,
                     subscription_id,
                     paid_online,
-                    customer_name
+                    menupro_name
                 )
                 response_data = self.build_response_data(
                     new_order_result,

@@ -19,7 +19,11 @@
                     <div>--------------------------------</div>
                     <div t-esc="props.data.cashier" />
                 </div>
-                <div t-if="props.data.table ">
+                <!-- Afficher le nom du client pour les floating orders, sinon afficher la table -->
+                <div t-if="props.data.floating_order_name">
+                    <span t-esc="props.data.floating_order_name" />
+                </div>
+                <div t-elif="props.data.table ">
                     Table : <span class="props.data.table" t-esc="props.data.table" />
                 </div>
                 <div t-if="props.data.ticket_number ">
