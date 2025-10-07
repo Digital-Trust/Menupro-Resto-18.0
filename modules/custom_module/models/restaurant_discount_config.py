@@ -19,10 +19,11 @@ class RestaurantDiscountConfig(models.Model):
     discount_percentage = fields.Float(string='Pourcentage de remise (%)', default=0.0)
     discount_name = fields.Char(string='Nom de la remise', default='Remise QR Mobile')
     min_amount = fields.Float(string='Montant minimum', default=0.0)
-    max_discount = fields.Float(string='Remise maximum (€)', default=0.0)
+    max_discount = fields.Float(string='Remise maximum', default=0.0)
     menupro_id = fields.Char(string='MenuPro ID')
     is_mobile_default = fields.Boolean(string='Code promo mobile par défaut', default=False, help="Identifie le code promo par défaut pour les commandes mobile self-order")
-
+    expiration_date = fields.Date(string='Date d\'expiration', help="Date d'expiration de la remise")
+    start_date = fields.Date(string='Date de début', help="Date de début de la remise")
 
     _sql_constraints = [
         ('discount_code_uniq', 'unique(discount_code)', "Le code de remise doit être unique !"),
@@ -64,7 +65,8 @@ class RestaurantDiscountConfig(models.Model):
             "minAmount": self.min_amount,
             "maxDiscount": self.max_discount,
             "isMobileDefault": self.is_mobile_default,
-
+            "expirationDate": self.expiration_date,
+            "startDate": self.start_date,
         }
 
     def _call_mp(self, method, url, json=None):
@@ -159,6 +161,8 @@ class RestaurantDiscountConfig(models.Model):
             'discount_name': config.discount_name,
             'min_amount': config.min_amount,
             'max_discount': config.max_discount or None,
+            'expiration_date': config.expiration_date or None,
+            'start_date': config.start_date or None,
         }
 
     @api.model
@@ -188,6 +192,8 @@ class RestaurantDiscountConfig(models.Model):
                 'discount_name': 'Remise Mobile Self-Order',
                 'min_amount': 0.0,
                 'max_discount': None,
+                'expiration_date': None,
+                'start_date': None,
             }
 
         return {
@@ -206,6 +212,8 @@ class RestaurantDiscountConfig(models.Model):
             'discount_name': 'Remise QR Mobile',
             'min_amount': 0.0,
             'max_discount': None,
+            'expiration_date': None,
+            'start_date': None,
         }
 
     @api.model
@@ -224,43 +232,12 @@ class RestaurantDiscountConfig(models.Model):
                 'min_amount': 0.0,
                 'max_discount': 0.0,
                 'discount_code': 'DEFAULT',
+                'expiration_date': None,
+                'start_date': None,
             })
         return True
 
-    @api.model
-    def ensure_mobile_default_promo_exists(self, restaurant_id=None):
-        """
-        S'assure qu'un code promo par défaut pour mobile self-order existe
-        
-        :param restaurant_id: ID du restaurant
-        :return: True si la configuration existe ou a été créée
-        """
-        cfg = self._get_config()
-        if not restaurant_id:
-            restaurant_id = cfg['restaurant_id']
-        if not restaurant_id:
-            return False
-            
-        # Vérifier si le code promo mobile par défaut existe déjà
-        existing_mobile_config = self.search([
-            ('restaurant_id', '=', restaurant_id),
-            ('discount_code', '=', 'MOBILE_DEFAULT')
-        ], limit=1)
-        
-        if not existing_mobile_config:
-            # Créer le code promo par défaut pour mobile
-            self.create({
-                'restaurant_id': restaurant_id,
-                'enabled': True,  # Activé par défaut
-                'discount_percentage': 10.0,  # 10% de remise par défaut
-                'discount_name': 'Remise Mobile Self-Order',
-                'min_amount': 0.0,  # Pas de montant minimum
-                'max_discount': 0.0,  # Pas de plafond par défaut
-                'discount_code': 'MOBILE_DEFAULT',
-            })
-            _logger.info(f"Code promo par défaut mobile créé pour le restaurant {restaurant_id}")
-        
-        return True
+   
 
     @api.constrains('discount_percentage')
     def _check_discount_percentage(self):
@@ -326,4 +303,38 @@ class RestaurantDiscountConfig(models.Model):
                         f"Il ne peut y avoir qu'un seul code promo mobile par défaut par restaurant. "
                         f"Le code '{other_defaults[0].discount_name}' est déjà configuré comme mobile par défaut."
                     )
+
+    @api.constrains('start_date', 'expiration_date')
+    def _check_date_validity(self):
+        """Vérifie que la date de début est antérieure à la date d'expiration"""
+        for record in self:
+            if record.start_date and record.expiration_date:
+                if record.start_date > record.expiration_date:
+                    raise ValidationError(
+                        "La date de début doit être antérieure à la date d'expiration."
+                    )
+
+    def is_promo_active(self, check_date=None):
+        """
+        Vérifie si le code promo est actif à une date donnée
+        
+        :param check_date: Date à vérifier (par défaut, date du jour)
+        :return: True si le code promo est actif, False sinon
+        """
+        if not check_date:
+            check_date = fields.Date.context_today(self)
+        
+        # Vérifier si le code promo est activé
+        if not self.enabled:
+            return False
+        
+        # Vérifier la date de début
+        if self.start_date and check_date < self.start_date:
+            return False
+        
+        # Vérifier la date d'expiration
+        if self.expiration_date and check_date > self.expiration_date:
+            return False
+        
+        return True
 

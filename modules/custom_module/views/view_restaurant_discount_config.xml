@@ -19,6 +19,10 @@
                         <field name="min_amount"/>
                         <field name="max_discount" help="Laisser vide pour pas de plafond"/>
                     </group>
+                    <group string="Dates de validité">
+                        <field name="start_date" help="Date de début de validité du code promo (optionnel)"/>
+                        <field name="expiration_date" help="Date d'expiration du code promo (optionnel)"/>
+                    </group>
                 </sheet>
             </form>
         </field>
@@ -37,6 +41,8 @@
                 <field name="discount_percentage" string="Remise (%)"/>
                 <field name="min_amount" string="Montant min"/>
                 <field name="max_discount" string="Plafond"/>
+                <field name="start_date" string="Date début"/>
+                <field name="expiration_date" string="Date fin"/>
             </list>
 
         </field>
@@ -49,10 +55,15 @@
             <search string="Recherche Configuration Remise">
                 <field name="discount_name"/>
                 <field name="restaurant_id"/>
+                <field name="start_date"/>
+                <field name="expiration_date"/>
                 <filter name="enabled" string="Activées" domain="[('enabled', '=', True)]"/>
                 <filter name="disabled" string="Désactivées" domain="[('enabled', '=', False)]"/>
                 <filter name="mobile_default" string="Mobile par défaut" domain="[('is_mobile_default', '=', True)]"/>
                 <filter name="regular_promos" string="Codes promo normaux" domain="[('is_mobile_default', '=', False)]"/>
+                <filter name="active_promos" string="Promos actives" domain="[('enabled', '=', True), ('start_date', '&lt;=', context_today()), ('expiration_date', '&gt;=', context_today())]"/>
+                <filter name="expired_promos" string="Promos expirées" domain="[('expiration_date', '&lt;', context_today())]"/>
+                <filter name="future_promos" string="Promos futures" domain="[('start_date', '&gt;', context_today())]"/>
             </search>
         </field>
     </record>
