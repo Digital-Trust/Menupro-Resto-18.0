@@ -20,7 +20,7 @@
                     <div t-esc="props.data.cashier" />
                 </div>
                 <!-- Afficher le nom du client pour les floating orders, sinon afficher la table -->
-                <div t-if="props.data.floating_order_name">
+                <div t-if="props.data.floating_order_name" style="font-size: 120%; font-weight: bold;">
                     <span t-esc="props.data.floating_order_name" />
                 </div>
                 <div t-elif="props.data.table ">
