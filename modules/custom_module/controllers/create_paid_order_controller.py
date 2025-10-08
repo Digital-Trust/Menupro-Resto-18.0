@@ -4,6 +4,7 @@ from odoo import http, fields
 from odoo.http import request
 import uuid
 from datetime import date, datetime
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -366,7 +367,8 @@ class CreatePaidOrderController(http.Controller):
             raw_data = request.httprequest.data
             data = json.loads(raw_data.decode('utf-8')) if raw_data else {}
 
-            _logger.info(f"Données reçues: {json.dumps(data, indent=2)}")
+            masked_data = mask_sensitive_data(data)
+            _logger.info(f"Données reçues: {json.dumps(masked_data, indent=2)}")
 
             order_data = data.get('order', {})
             if not order_data or 'lines' not in order_data:

@@ -5,6 +5,7 @@ from odoo.http import request
 from odoo.addons.pos_self_order.controllers.orders import PosSelfOrderController
 import uuid
 from datetime import date, datetime
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -85,7 +86,8 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"📱 apply_default_mobile_promo - amount_total: {amount_total}, restaurant_id: {restaurant_id}")
         config_model = request.env['restaurant.discount.config'].sudo()
         discount_config = config_model.get_default_mobile_promo_config(restaurant_id)
-        _logger.info(f"Config trouvée: {discount_config}")
+        masked_config = mask_sensitive_data(discount_config)
+        _logger.info(f"Config trouvée: {masked_config}")
 
         if not discount_config['enabled']:
             _logger.warning(f"❌ Code promo par défaut désactivé (enabled=False)")
@@ -564,9 +566,9 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"device_type: {device_type}")
             _logger.info(f"origine: {order_data.get('origine')}")
             _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
-            _logger.info(f"discount_code: {discount_code}")
-            _logger.info(f"mobile_user_id reçu: {mobile_user_id}")
-            _logger.info(f"subscription_id reçu: {subscription_id}")
+            _logger.info(f"discount_code: {'***MASKED***' if discount_code else None}")
+            _logger.info(f"mobile_user_id reçu: {'***MASKED***' if mobile_user_id else None}")
+            _logger.info(f"subscription_id reçu: {'***MASKED***' if subscription_id else None}")
             _logger.info(f"menupro_id reçu: {menupro_id}")
             _logger.info(f"takeaway reçu: {takeaway}")
             _logger.info(f"paid_online reçu: {paid_online}")
@@ -737,9 +739,10 @@ class OrderController(PosSelfOrderController):
             # Debug de la réponse
             _logger.info(f"=== RESPONSE DATA DEBUG ===")
             if isinstance(response_data, dict):
-                _logger.info(f"Response keys: {list(response_data.keys())}")
-                _logger.info(f"takeaway in response: {response_data.get('takeaway', 'NOT_FOUND')}")
-                _logger.info(f"mobile_user_id in response: {response_data.get('mobile_user_id', 'NOT_FOUND')}")
+                masked_response = mask_sensitive_data(response_data)
+                _logger.info(f"Response keys: {list(masked_response.keys())}")
+                _logger.info(f"takeaway in response: {masked_response.get('takeaway', 'NOT_FOUND')}")
+                _logger.info(f"mobile_user_id in response: {'***MASKED***' if response_data.get('mobile_user_id') else 'NOT_FOUND'}")
             _logger.info(f"=== END RESPONSE DEBUG ===")
 
             # Retour de la réponse

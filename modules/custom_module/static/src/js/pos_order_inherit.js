@@ -115,13 +115,6 @@ patch(PosOrder.prototype, {
         }
     },
 
-    /* This function is called after the order has been successfully sent to the preparation tool(s). */
-    // @Override
-    updateLastOrderChange() {
-
-        const res = super.updateLastOrderChange();
-    },
-
      /**
      * A wrapper around line.delete() that may potentially remove multiple orderlines.
      * In core pos, it removes the linked combo lines. In other modules, it may remove

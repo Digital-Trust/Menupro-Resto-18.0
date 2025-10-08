@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 
 from odoo.exceptions import UserError
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -48,10 +49,11 @@ class PosOrder(models.Model):
         for k, v in cfg.items():
             if not v:
                 _logger.error("%s is missing in config", k)
-                raise UserError(f"L’option '{k}' est manquante dans la configuration.")
+                raise UserError(f"L'option '{k}' est manquante dans la configuration.")
 
         self.env._mp_config = cfg
-        _logger.info("\033[92mMenuPro config OK\033[0m")
+        masked_cfg = mask_sensitive_data(cfg)
+        _logger.info("\033[92mMenuPro config OK: %s\033[0m", masked_cfg)
         return cfg
 
 
@@ -93,14 +95,16 @@ class PosOrder(models.Model):
                     base = cfg.get('notif_url')
                     if base:
                         payload = order._build_payload()
-                        _logger.info("payload cancel notif: %s", payload)
+                        masked_payload = mask_sensitive_data(payload)
+                        _logger.info("payload cancel notif: %s", masked_payload)
 
                         data = order._call_mp(
                             "POST",
                             f"{base}/Send-cancel-order-notif",
                             payload
                         )
-                        _logger.info("cancel notif response: %s", data)
+                        masked_response = mask_sensitive_data(data)
+                        _logger.info("cancel notif response: %s", masked_response)
                 except Exception as e:
                     _logger.warning("Impossible d'envoyer la notif annulation: %s", e)
         return result
@@ -167,10 +171,8 @@ class PosOrder(models.Model):
     def _sync_reservation(self, order):
         odoo_secret_key = tools.config.get("odoo_secret_key")
         table_id = order.get('table_id')
-        # print("order table", table_id)
 
         restaurant_table = self.env['restaurant.table'].search([('id', '=', table_id)])
-        # print("restaurant_table", restaurant_table)
 
         if restaurant_table:
             menupro_id = restaurant_table.menupro_id
@@ -210,11 +212,9 @@ class PosOrder(models.Model):
 
         headers = {'x-odoo-key': odoo_secret_key}
         payload = self._prepare_api_payload(order, restaurant_id)
-        # print("Payload to be sent to our server =>", payload)
 
         try:
             response = requests.patch(api_url, json=payload, headers=headers)
-            # print('response of finance =>', response.text)
         except Exception as e:
             _logger.error("Error API: %s", str(e))
             raise
@@ -232,7 +232,6 @@ class PosOrder(models.Model):
         pos_order = self.env['pos.order'].sudo().search([('id', '=', order_id)], limit=1)
         if pos_order:
             pos_order.write({'menupro_id': menupro_id})
-            # print(f"Order {pos_order.name} updated with menupro_id {menupro_id}")
         else:
             _logger.warning(f"No POS order found with ID {order_id}")
 

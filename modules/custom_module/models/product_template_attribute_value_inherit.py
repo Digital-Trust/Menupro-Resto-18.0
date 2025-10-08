@@ -1,5 +1,6 @@
 from odoo import models, fields, api
 import logging
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -49,10 +50,12 @@ class ProductTemplateAttributeValue(models.Model):
 
 
                 payload = rec._build_payload()
-                _logger.debug("PTAV Payload to send: %s", payload)
+                masked_payload = mask_sensitive_data(payload)
+                _logger.debug("PTAV Payload to send: %s", masked_payload)
                 
                 data = rec._call_mp("POST", base, payload)
-                _logger.debug("PTAV Response received: %s", data)
+                masked_response = mask_sensitive_data(data)
+                _logger.debug("PTAV Response received: %s", masked_response)
 
                 if data and data.get("_id"):
                     rec.menuproId = data.get("_id")

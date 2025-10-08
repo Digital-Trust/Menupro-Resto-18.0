@@ -5,6 +5,7 @@ import requests
 
 from odoo import models, fields, api, tools
 from odoo.exceptions import ValidationError, UserError
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -46,10 +47,11 @@ class RestaurantDiscountConfig(models.Model):
         for k, v in cfg.items():
             if not v:
                 _logger.error("%s is missing in config", k)
-                raise UserError(f"L’option '{k}' est manquante dans la configuration.")
+                raise UserError(f"L'option '{k}' est manquante dans la configuration.")
 
         self.env._mp_config = cfg
-        _logger.info("\033[92mMenuPro config OK\033[0m")
+        masked_cfg = mask_sensitive_data(cfg)
+        _logger.info("\033[92mMenuPro config OK: %s\033[0m", masked_cfg)
         return cfg
 
     def _build_payload(self):
@@ -101,10 +103,7 @@ class RestaurantDiscountConfig(models.Model):
             except Exception as e:
                 _logger.error("Failed to sync discount config %s with MenuPro: %s", record.id, e)
 
-
         return records
-
-        return super().create(vals_list)
 
     @api.constrains('enabled', 'discount_percentage')
     def _check_enabled_discount_percentage(self):
@@ -116,7 +115,6 @@ class RestaurantDiscountConfig(models.Model):
     def write(self, vals):
         if 'restaurant_id' in vals:
             del vals['restaurant_id']
-
 
         res = super().write(vals)
 
@@ -242,8 +240,6 @@ class RestaurantDiscountConfig(models.Model):
                 'start_date': None,
             })
         return True
-
-   
 
     @api.constrains('discount_percentage')
     def _check_discount_percentage(self):
