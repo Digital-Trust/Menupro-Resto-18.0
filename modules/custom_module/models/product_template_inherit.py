@@ -226,15 +226,15 @@ class ProductTemplate(models.Model):
 
             # Call API to update menu in MenuPro
             response = requests.patch(api_url, json=data,  headers={'x-odoo-key': odoo_secret_key})
-            # print("resp update menupro ---->", response)  # juste le code
-            # print("Status code:", response.status_code)  # code HTTP (400)
-            # print("Reason:", response.reason)  # message court
-            # print("Text:", response.text)  # réponse brute du serveur
-            # print("JSON:",
-            #       response.json() if response.headers.get('Content-Type') == 'application/json' else "Not JSON")
-            # print("Request URL:", response.request.url)  # URL appelée
-            # print("Request body:", response.request.body)  # ce que tu envoies
-            # print("Request headers:", response.request.headers)  # headers envoyés
+            print("resp update menupro ---->", response)  # juste le code
+            print("Status code:", response.status_code)  # code HTTP (400)
+            print("Reason:", response.reason)  # message court
+            print("Text:", response.text)  # réponse brute du serveur
+            print("JSON:",
+                  response.json() if response.headers.get('Content-Type') == 'application/json' else "Not JSON")
+            print("Request URL:", response.request.url)  # URL appelée
+            print("Request body:", response.request.body)  # ce que tu envoies
+            print("Request headers:", response.request.headers)  # headers envoyés
 
             if response.status_code != 200:
                 return "There is a problem while updating Menupro Menu"
@@ -305,12 +305,13 @@ class ProductTemplate(models.Model):
             name = product.get('name', '')
             description = product.get('description', '') or ''
             pos_categ_ids = product.get('pos_categ_ids', [])
+            self_order_available = product.get('self_order_available', True)
         else:
             list_price = getattr(product, 'list_price', 0.0)
             name = getattr(product, 'name', '')
             description = getattr(product, 'description', '') or ''
             pos_categ_ids = getattr(product, 'pos_categ_ids', [])
-
+            self_order_available = getattr(product, 'self_order_available', True)
         api_url = tools.config.get("api_url")
         if api_url is None:
             _logger.error("There is no API_URL in Config")
@@ -346,6 +347,12 @@ class ProductTemplate(models.Model):
                 if menu_categ_id:
                     data['menuCateg'] = menu_categ_id
 
+                if self_order_available is False:
+                    data['status'] = 'BLOCKED'
+                else:
+                    data['status'] = 'PUBLISHED'
+                print("data", data)
+                
                 return data
             else:
                 _logger.error("There is a problem while getting restaurant Info")

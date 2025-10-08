@@ -22,7 +22,13 @@
                             </div>
 
                             <span class="my-4" style="font-size: 120%;">
-                                <t t-if="changes.floor_name || changes.table_name">
+                                <!-- Afficher le nom du client pour les floating orders, sinon afficher floor/table -->
+                                <t t-if="changes.floating_order_name">
+                                    <div class="pos-receipt-title" >
+                                        <div><t t-esc="changes.floating_order_name" /></div>
+                                    </div>
+                                </t>
+                                <t t-elif="changes.floor_name || changes.table_name">
                                     <div class="pos-receipt-title" >
                                         <div><t t-esc="changes.floor_name" /> / <t t-esc="changes.table_name" /></div>
                                     </div>

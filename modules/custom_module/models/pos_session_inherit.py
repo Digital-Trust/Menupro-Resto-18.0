@@ -34,10 +34,18 @@ class PosSession(models.Model):
         Decrement the stock of a component in its preferred location
             or in the first available internal location.
         """
+
+        if not component.is_storable:
+            _logger.info(
+                f"Le produit {component.name} n'est pas stockable (is_storable=False). Ignoré."
+            )
+            return
         preferred_location = component.product_tmpl_id.pos_preferred_location_id
 
         if preferred_location:
             stock_quant = self._get_or_create_stock_quant(component, preferred_location)
+            if not stock_quant:  # ✅ Gérer le cas où le quant n'est pas créé
+                return
             if stock_quant.quantity < qty_to_deduct:
                 _logger.info(
                     f"Attention: Stock insuffisant pour {component.name} dans l'emplacement "
@@ -83,6 +91,12 @@ class PosSession(models.Model):
         """
         Retrieve or create a stock quant for a given product and location.
         """
+        if not product.is_storable:
+            _logger.warning(
+                f"Impossible de créer des quants pour des produits non stockables. "
+                f"Produit: {product.name} (is_storable=False)"
+            )
+            return False
         stock_quant = self.env['stock.quant'].search([
             ('product_id', '=', product.id),
             ('location_id', '=', location.id)
@@ -95,6 +109,7 @@ class PosSession(models.Model):
                 'quantity': 0
             })
             _logger.info(f"Nouveau stock_quant créé pour {product.name}")
+
         return stock_quant
 
     def process_bom_recursively(self, product, quantity, warnings, override_location=None):
@@ -102,6 +117,13 @@ class PosSession(models.Model):
         Recursively process the BOM and decrement the stock.
         For 'normal' type BOMs, deduct the finished product instead of components.
         """
+
+        if not product.is_storable:
+            _logger.info(
+                f"Le produit {product.name} n'est pas stockable (is_storable=False). "
+                f"Aucune déduction de stock nécessaire."
+            )
+            return
         if override_location is None:
             final_product_location = product.product_tmpl_id.pos_preferred_location_id
             if final_product_location:
@@ -167,7 +189,15 @@ class PosSession(models.Model):
         """
         Décrémenter le stock d'un composant depuis un emplacement spécifique.
         """
+
+        if not component.is_storable:
+            _logger.info(
+                f"Le composant {component.name} n'est pas stockable. Ignoré."
+            )
+            return
         stock_quant = self._get_or_create_stock_quant(component, location)
+        if not stock_quant:  # ✅ Gérer le retour False
+            return
 
         if stock_quant.quantity < qty_to_deduct:
             warning_msg = (
@@ -228,6 +258,12 @@ class PosSession(models.Model):
             processed_products = set()
 
         stock_errors = []
+        if not product.is_storable:
+            _logger.info(
+                f"Le produit {product.name} n'est pas stockable. "
+                f"Vérification de stock ignorée."
+            )
+            return stock_errors
 
         if override_location is None:
             final_product_location = product.product_tmpl_id.pos_preferred_location_id
@@ -294,6 +330,12 @@ class PosSession(models.Model):
         Checks the stock level for a single component.
         """
         errors = []
+        if not component.is_storable:
+            _logger.info(
+                f"Le composant {component.name} n'est pas stockable. "
+                f"Vérification de stock ignorée."
+            )
+            return errors
 
         if override_location:
             stock_quants = self.env['stock.quant'].search([
