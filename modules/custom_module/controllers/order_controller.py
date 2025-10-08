@@ -405,18 +405,6 @@ class OrderController(PosSelfOrderController):
         request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
         return existing_order
 
-    def debug_order_fields(self, order):
-        """
-        Méthode pour déboguer les champs de la commande
-        """
-        _logger.info(f"=== DEBUG ORDER FIELDS ===")
-        _logger.info(f"Order ID: {order.id}")
-        _logger.info(f"mobile_user_id: {getattr(order, 'mobile_user_id', 'FIELD_NOT_EXISTS')}")
-        _logger.info(f"subscription_id: {getattr(order, 'subscription_id', 'FIELD_NOT_EXISTS')}")
-        _logger.info(f"table_id: {order.table_id.id}")
-        _logger.info(f"state: {order.state}")
-        _logger.info(f"=== END DEBUG ===")
-
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
                          mobile_user_id=None, subscription_id=None, paid_online=None, menupro_name=None):
         """
