@@ -112,10 +112,12 @@ class PosSession(models.Model):
 
         return stock_quant
 
-    def process_bom_recursively(self, product, quantity, warnings, override_location=None):
+    def process_bom_recursively(self, product, quantity, warnings, override_location=None, bom_dict=None):
         """
         Recursively process the BOM and decrement the stock.
         For 'normal' type BOMs, deduct the finished product instead of components.
+        
+        :param bom_dict: Optional pre-fetched dictionary of BOMs {product_tmpl_id: bom}
         """
 
         if not product.is_storable:
@@ -133,9 +135,13 @@ class PosSession(models.Model):
                     f"Utilisation prioritaire de cet emplacement pour tous les composants."
                 )
 
-        bom = self.env['mrp.bom'].search([
-            ('product_tmpl_id', '=', product.product_tmpl_id.id)
-        ], limit=1)
+        # Use pre-fetched BOM if available, otherwise search
+        if bom_dict is not None:
+            bom = bom_dict.get(product.product_tmpl_id.id)
+        else:
+            bom = self.env['mrp.bom'].search([
+                ('product_tmpl_id', '=', product.product_tmpl_id.id)
+            ], limit=1)
 
         if bom:
             # Vérifier le type de nomenclature
@@ -176,7 +182,7 @@ class PosSession(models.Model):
                     if sub_bom:
                         # Appel récursif pour le sous-composant
                         _logger.info(f"Traitement de la sous-nomenclature pour {component.name}")
-                        self.process_bom_recursively(component, qty_to_deduct, warnings, override_location)
+                        self.process_bom_recursively(component, qty_to_deduct, warnings, override_location, bom_dict)
                     else:
                         # Composant de base, déduction du stock
                         if override_location:
@@ -230,15 +236,56 @@ class PosSession(models.Model):
         self.ensure_one()
         warnings = []
 
+        # Batch optimization: Collect all lines first
+        all_lines = []
         for order in self._get_closed_orders():
-            for line in order.lines:
-                product = line.product_id
-                _logger.info(
-                    f"Traitement du produit {product.name} (type: {product.type}) avec quantité {line.qty}"
-                )
+            all_lines.extend(order.lines)
+        
+        if not all_lines:
+            return True
 
-                product_location = product.product_tmpl_id.pos_preferred_location_id
-                self.process_bom_recursively(product, line.qty, warnings, override_location=product_location)
+        # Pre-fetch all products and their templates to reduce queries
+        products = self.env['product.product'].browse([line.product_id.id for line in all_lines])
+        product_tmpl_ids = products.mapped('product_tmpl_id.id')
+        
+        # Pre-fetch all BOMs for these products in one query
+        all_boms = self.env['mrp.bom'].search([
+            ('product_tmpl_id', 'in', product_tmpl_ids)
+        ])
+        bom_dict = {bom.product_tmpl_id.id: bom for bom in all_boms}
+        
+        # Group lines by product to aggregate quantities
+        product_qty_map = {}
+        for line in all_lines:
+            product = line.product_id
+            product_location = product.product_tmpl_id.pos_preferred_location_id
+            
+            key = (product.id, product_location.id if product_location else None)
+            if key not in product_qty_map:
+                product_qty_map[key] = {
+                    'product': product,
+                    'quantity': 0,
+                    'location': product_location
+                }
+            product_qty_map[key]['quantity'] += line.qty
+            
+            _logger.info(
+                f"Traitement du produit {product.name} (type: {product.type}) avec quantité {line.qty}"
+            )
+
+        # Process each unique product-location combination
+        for key, data in product_qty_map.items():
+            product = data['product']
+            quantity = data['quantity']
+            product_location = data['location']
+            
+            self.process_bom_recursively(
+                product, 
+                quantity, 
+                warnings, 
+                override_location=product_location,
+                bom_dict=bom_dict
+            )
 
         if warnings:
             warning_message = "Avertissements de stock :\n\n" + "\n".join(warnings)
