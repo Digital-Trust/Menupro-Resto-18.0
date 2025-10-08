@@ -190,9 +190,9 @@ class PosOrder(models.Model):
                     )
                     response.raise_for_status()
                 except requests.RequestException as e:
-                    print(f"API request failed for {menupro_id}: {e}")
+                    _logger.error("API request failed for table %s: %s", menupro_id, e, exc_info=True)
             else:
-                print(f"Invalid menupro_id: {menupro_id}")
+                _logger.warning("Invalid menupro_id for table: %s", menupro_id)
 
 
 

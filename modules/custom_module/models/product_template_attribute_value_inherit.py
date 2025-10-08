@@ -37,9 +37,9 @@ class ProductTemplateAttributeValue(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        print("ProductTemplateAttributeValue vals_list =>", vals_list)
+        _logger.debug("Creating ProductTemplateAttributeValue with vals: %s", vals_list)
         records = super().create(vals_list)
-        print("ProductTemplateAttributeValue records =>", records)
+        _logger.debug("Created ProductTemplateAttributeValue records: %s", records)
 
         cfg = self._get_config()
         base = f"{cfg['attributs_url']}/template-values"
@@ -49,10 +49,10 @@ class ProductTemplateAttributeValue(models.Model):
 
 
                 payload = rec._build_payload()
-                print("PTAV Payload envoyé:", payload)
-
+                _logger.debug("PTAV Payload to send: %s", payload)
+                
                 data = rec._call_mp("POST", base, payload)
-                print("PTAV Réponse reçue:", data)
+                _logger.debug("PTAV Response received: %s", data)
 
                 if data and data.get("_id"):
                     rec.menuproId = data.get("_id")

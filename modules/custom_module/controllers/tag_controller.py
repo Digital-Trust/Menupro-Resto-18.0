@@ -12,13 +12,13 @@ class TagController(http.Controller):
 
     @http.route('/create_tag', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def create_tag(self):
-        print('Entering create_tag method')
+        _logger.info("Entering create_tag method")
         if request.httprequest.method == 'OPTIONS':
             return CorsController._add_cors_headers(Response(status=204))
 
         try:
             data = request.httprequest.data.decode('utf-8')
-            print(f"Received data: {data}")
+            _logger.debug("Received tag data: %s", data)
             if data:
                 data = json.loads(data)
             else:
@@ -28,7 +28,7 @@ class TagController(http.Controller):
             menupro_id = data.get('menupro_id')
             status = data.get('status')
 
-            print(f"Name: {name}, MenuPro ID: {menupro_id}, Status: {status}")
+            _logger.info("Processing tag - Name: %s, MenuPro ID: %s, Status: %s", name, menupro_id, status)
 
             if not name:
                 missing_fields = []
@@ -51,17 +51,17 @@ class TagController(http.Controller):
                 'name': name,
                 'odooId': created_tag.id
             }
-            print(f"Sending PATCH request to MenuPro: {mp_data}")
+            _logger.debug("Sending PATCH request to MenuPro with data: %s", mp_data)
             mp_response = requests.patch(f'https://api.menupro.tn/tags/{menupro_id}', json=mp_data)
-            print(f"MenuPro response status: {mp_response.status_code}")
-            print(f"MenuPro response content: {mp_response.content}")
+            _logger.info("MenuPro tag update response: status=%s", mp_response.status_code)
+            _logger.debug("MenuPro response content: %s", mp_response.content)
 
             response = {'status': 'Tag created successfully', 'id': created_tag.id}
             return CorsController._add_cors_headers(
                 Response(json.dumps(response), content_type='application/json', status=200))
 
         except Exception as e:
-            print(f"Error in create_tag: {str(e)}")
+            _logger.error("Error in create_tag: %s", str(e), exc_info=True)
             response = {'error': str(e)}
             return CorsController._add_cors_headers(
                 Response(json.dumps(response), content_type='application/json', status=500))
@@ -82,17 +82,17 @@ class TagController(http.Controller):
             # Search for the tag in Odoo
             tag = request.env['table.tags'].sudo().search([('id', '=', tag_id)], limit=1)
             menupro_id=tag.menupro_id
-            print('menupro id',menupro_id)
+            _logger.debug("Tag menupro_id: %s", menupro_id)
             if not tag:
                 response = {'error': 'Tag not found'}
                 return CorsController._add_cors_headers(
                     Response(json.dumps(response), content_type='application/json', status=404))
 
             # Step 1: Send DELETE request to MenuPro API
-            print(f"Attempting to delete tag from MenuPro with ID: {tag_id}")
+            _logger.info("Attempting to delete tag from MenuPro with ID: %s", tag_id)
             mp_response = requests.delete(f"https://api.menupro.tn/tags/{menupro_id}")
-            print(f"MenuPro delete response status: {mp_response.status_code}")
-            print(f"MenuPro delete response content: {mp_response.content}")
+            _logger.info("MenuPro delete response: status=%s", mp_response.status_code)
+            _logger.debug("MenuPro delete response content: %s", mp_response.content)
 
             # Check the response status code
             if not mp_response.status_code in [200, 204]:
@@ -106,7 +106,7 @@ class TagController(http.Controller):
                 Response(json.dumps(response), content_type='application/json', status=200))
 
         except Exception as e:
-            print(f"Error in delete_tag: {str(e)}")
+            _logger.error("Error in delete_tag: %s", str(e), exc_info=True)
             response = {'error': str(e)}
             return CorsController._add_cors_headers(
                 Response(json.dumps(response), content_type='application/json', status=500))

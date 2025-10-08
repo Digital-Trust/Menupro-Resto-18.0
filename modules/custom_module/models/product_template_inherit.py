@@ -76,7 +76,7 @@ class ProductTemplate(models.Model):
                     if self._should_create_in_menupro_for_create(product_vals):
                         self._process_single_product(product_vals)   # create in MenuPro and Odoo
                     else:
-                        print(f"Skipping MenuPro creation for product {product_vals.get('name', 'Unknown')} - no valid pos_category with menupro_id")
+                        _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", product_vals.get('name', 'Unknown'))
                 # Always create in Odoo regardless of MenuPro status
                 created_records += super(ProductTemplate, self).create(non_consu_products)
 
@@ -91,7 +91,7 @@ class ProductTemplate(models.Model):
             # Create in both MenuPro and Odoo
             self._process_single_product(vals_list)
         else:
-            print(f"Skipping MenuPro creation for product {vals_list.get('name', 'Unknown')} - no valid pos_category with menupro_id")
+            _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", vals_list.get('name', 'Unknown'))
         
         # Always create in Odoo regardless of MenuPro status
         return super(ProductTemplate, self).create(vals_list)
@@ -145,7 +145,7 @@ class ProductTemplate(models.Model):
     def write(self, vals):
         res = super(ProductTemplate, self).write(vals)
         for product in self:
-            print("product", product)
+            _logger.debug("Updating product: %s", product.name)
 
             if product.is_storable is True:
                 continue
@@ -173,7 +173,7 @@ class ProductTemplate(models.Model):
             if pos_category.menupro_id:
                 return True
         
-        print(f"Product {product.name} has pos_category but none have menupro_id - skipping MenuPro creation")
+        _logger.debug("Product %s has pos_category but none have menupro_id - skipping MenuPro creation", product.name)
         return False
 
     def _create_product_in_menupro(self, product):
@@ -187,7 +187,7 @@ class ProductTemplate(models.Model):
 
             # Prepare data for MenuPro
             data = self.prepare_data(product)
-            print("data",data)
+            _logger.debug("MenuPro data prepared for product %s", product.name)
             response = requests.post(api_url, json=data, headers={'x-odoo-key': odoo_secret_key})
             
             if response.status_code in [200, 201]:
@@ -196,13 +196,12 @@ class ProductTemplate(models.Model):
                 if menupro_id:
                     product.write({'menupro_id': menupro_id})
                 else:
-                    print(f"Failed to get menupro_id from response for product {product.name}")
+                    _logger.warning("Failed to get menupro_id from response for product %s", product.name)
             else:
-                print(f"Failed to create product {product.name} in MenuPro. Status: {response.status_code}, Response: {response.text}")
+                _logger.error("Failed to create product %s in MenuPro. Status: %s", product.name, response.status_code)
                 
         except Exception as e:
-            _logger.error(f"Error creating product {product.name} in MenuPro: {e}")
-            print(f"Error creating product {product.name} in MenuPro: {e}")
+            _logger.error("Error creating product %s in MenuPro: %s", product.name, e, exc_info=True)
 
     def _create_or_update_menupro_menu(self, product):
         # Get data
@@ -226,15 +225,13 @@ class ProductTemplate(models.Model):
 
             # Call API to update menu in MenuPro
             response = requests.patch(api_url, json=data,  headers={'x-odoo-key': odoo_secret_key})
-            print("resp update menupro ---->", response)  # juste le code
-            print("Status code:", response.status_code)  # code HTTP (400)
-            print("Reason:", response.reason)  # message court
-            print("Text:", response.text)  # réponse brute du serveur
-            print("JSON:",
-                  response.json() if response.headers.get('Content-Type') == 'application/json' else "Not JSON")
-            print("Request URL:", response.request.url)  # URL appelée
-            print("Request body:", response.request.body)  # ce que tu envoies
-            print("Request headers:", response.request.headers)  # headers envoyés
+            _logger.debug("MenuPro update response - Status: %s, URL: %s", response.status_code, response.request.url)
+            
+            # Log detailed info only in debug mode, and mask sensitive headers
+            if _logger.isEnabledFor(logging.DEBUG):
+                safe_headers = {k: v if k not in ['x-odoo-key', 'x-secret-key'] else '***MASKED***' 
+                               for k, v in response.request.headers.items()}
+                _logger.debug("Response details - Reason: %s, Headers: %s", response.reason, safe_headers)
 
             if response.status_code != 200:
                 return "There is a problem while updating Menupro Menu"
@@ -351,8 +348,8 @@ class ProductTemplate(models.Model):
                     data['status'] = 'BLOCKED'
                 else:
                     data['status'] = 'PUBLISHED'
-                print("data", data)
                 
+                _logger.debug("Prepared MenuPro data for product: %s", data.get('title'))
                 return data
             else:
                 _logger.error("There is a problem while getting restaurant Info")
@@ -401,8 +398,8 @@ class ProductTemplate(models.Model):
             try:
                 pos_category = self.env['pos.category'].browse(int(pos_categ_id))
                 if pos_category.exists() and pos_category.menupro_id:
-                    print(
-                        f"Using menuCateg from POS category '{pos_category.name}' with menupro_id: {pos_category.menupro_id}")
+                    _logger.debug("Using menuCateg from POS category '%s' with menupro_id: %s", 
+                                 pos_category.name, pos_category.menupro_id)
                     return pos_category.menupro_id
             except Exception as e:
                 _logger.error(f"Error processing pos_category ID {pos_categ_id}: {e}")

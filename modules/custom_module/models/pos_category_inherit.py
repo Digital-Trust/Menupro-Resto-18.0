@@ -140,11 +140,11 @@ class PosCategory(models.Model):
                 'type_name': pos_category.type_name,
             }
             self.env['product.category'].with_context(skip_pos_sync=True).create(product_category_vals)
-            print(f"Created product category '{pos_category.name}' for POS category '{pos_category.name}'")
+            _logger.info("Created product category '%s' for POS category '%s'", pos_category.name, pos_category.name)
         elif existing_product_category_by_name:
-            print(f"Product category with name '{pos_category.name}' already exists - skipping creation")
+            _logger.debug("Product category with name '%s' already exists - skipping creation", pos_category.name)
         elif existing_product_category:
-            print(f"Product category with menupro_id '{pos_category.menupro_id}' already exists - skipping creation")
+            _logger.debug("Product category with menupro_id '%s' already exists - skipping creation", pos_category.menupro_id)
 
     def _update_corresponding_product_category(self, pos_category, vals):
         """ Update corresponding product category with same menupro_id """
