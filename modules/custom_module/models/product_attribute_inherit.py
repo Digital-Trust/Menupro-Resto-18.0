@@ -5,6 +5,7 @@ import logging
 from odoo.exceptions import UserError
 from odoo.http import request
 from ..utils.security_utils import mask_sensitive_data
+from ..utils.config_cache import ConfigCache
 
 _logger = logging.getLogger(__name__)
 
@@ -13,27 +14,18 @@ class ProductAttribute(models.Model):
     menuproId = fields.Char(string="MenuPro ID", copy=False)
 
     def _get_config(self):
-        """Charge et valide la config une seule fois par thread."""
-        if hasattr(self.env, "_mp_config"):
-            return self.env._mp_config
-
-        ICParam = self.env['ir.config_parameter'].sudo()
-
-        cfg = {
-            'attributs_url': tools.config.get('attributs_url'),
-            'secret_key': tools.config.get('secret_key'),
-            'odoo_secret_key': tools.config.get('odoo_secret_key'),
-            'restaurant_id': ICParam.get_param('restaurant_id'),
-        }
-
-        for k, v in cfg.items():
-            if not v:
-                _logger.error("%s is missing in config", k)
-                raise UserError(f"L’option '{k}' est manquante dans la configuration.")
-
-        self.env._mp_config = cfg
+        """Charge et valide la config avec cache."""
+        config_keys = [
+            'attributs_url',
+            'secret_key',
+            'odoo_secret_key',
+            'restaurant_id'
+        ]
+        
+        cfg = ConfigCache.get_config(self.env, config_keys)
+        
         masked_cfg = mask_sensitive_data(cfg)
-        _logger.info("\033[92mMenuPro config OK: %s\033[0m", masked_cfg)
+        _logger.debug("\033[92mMenuPro config loaded: %s\033[0m", masked_cfg)
         return cfg
 
     def _build_payload(self):
