@@ -3,9 +3,11 @@ import logging
 from odoo import http, fields
 from odoo.http import request
 from odoo.addons.pos_self_order.controllers.orders import PosSelfOrderController
+from odoo.exceptions import ValidationError
 import uuid
 from datetime import date, datetime
 from ..utils.security_utils import mask_sensitive_data
+from ..utils.validators import InputValidator, DataSanitizer, PermissionChecker
 
 _logger = logging.getLogger(__name__)
 
@@ -525,17 +527,33 @@ class OrderController(PosSelfOrderController):
         """
         _logger.info('******************* process_mobile_order **************')
         try:
-            # Validation des données d'entrée
+            # Validation et sanitization des données d'entrée
             raw_data = request.httprequest.data
             data = json.loads(raw_data.decode('utf-8')) if raw_data else {}
+            
+            # Sanitize input data
+            data = DataSanitizer.sanitize_dict(data)
             order_data = data.get('order', {})
 
             if not order_data or 'lines' not in order_data:
                 return http.Response(json.dumps({"error": "Invalid order data"}),
                                      content_type='application/json', status=400)
 
-            # Extraction des paramètres
-            pos_config_id = data.get('pos_config_id')
+            # Validate required fields
+            try:
+                InputValidator.validate_required_fields(data, ['pos_config_id', 'access_token'])
+                InputValidator.validate_required_fields(order_data, ['lines'])
+            except ValidationError as e:
+                return http.Response(json.dumps({"error": str(e)}),
+                                     content_type='application/json', status=400)
+
+            # Extraction et validation des paramètres
+            try:
+                pos_config_id = InputValidator.validate_integer(data.get('pos_config_id'), 'pos_config_id', min_value=1)
+            except ValidationError as e:
+                return http.Response(json.dumps({"error": str(e)}),
+                                     content_type='application/json', status=400)
+            
             table_identifier = data.get('table_identifier')
             access_token = data.get('access_token')
             device_type = data.get('device_type', 'mobile')

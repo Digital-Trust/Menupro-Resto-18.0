@@ -2,9 +2,11 @@ import json
 import logging
 from odoo import http, fields
 from odoo.http import request
+from odoo.exceptions import ValidationError
 import uuid
 from datetime import date, datetime
 from ..utils.security_utils import mask_sensitive_data
+from ..utils.validators import InputValidator, DataSanitizer, PermissionChecker
 
 _logger = logging.getLogger(__name__)
 
@@ -363,10 +365,13 @@ class CreatePaidOrderController(http.Controller):
         """
         _logger.info('******************* create_paid_order_in_session **************')
         try:
-            # Validation des données d'entrée
+            # Validation et sanitization des données d'entrée
             raw_data = request.httprequest.data
             data = json.loads(raw_data.decode('utf-8')) if raw_data else {}
-
+            
+            # Sanitize input data
+            data = DataSanitizer.sanitize_dict(data)
+            
             masked_data = mask_sensitive_data(data)
             _logger.info(f"Données reçues: {json.dumps(masked_data, indent=2)}")
 
@@ -375,11 +380,30 @@ class CreatePaidOrderController(http.Controller):
                 return http.Response(json.dumps({"error": "Invalid order data"}),
                                      content_type='application/json', status=400)
 
-            # Extraction des paramètres
-            session_id = data.get('session_id')
-            employee_id = data.get('employee_id')
-            table_id = data.get('table_id')
-            payment_method_id = data.get('payment_method_id')  # Changed from payment_method
+            # Validate required fields
+            try:
+                InputValidator.validate_required_fields(data, ['session_id', 'payment_method_id'])
+                InputValidator.validate_required_fields(order_data, ['lines'])
+                
+                # Validate types
+                session_id = InputValidator.validate_integer(data.get('session_id'), 'session_id', min_value=1)
+                payment_method_id = InputValidator.validate_integer(data.get('payment_method_id'), 'payment_method_id', min_value=1)
+                
+                # Validate employee_id if provided
+                employee_id = data.get('employee_id')
+                if employee_id:
+                    employee_id = InputValidator.validate_integer(employee_id, 'employee_id', min_value=1)
+                
+                # Validate table_id if provided
+                table_id = data.get('table_id')
+                if table_id:
+                    table_id = InputValidator.validate_integer(table_id, 'table_id', min_value=1)
+                    
+            except ValidationError as e:
+                return http.Response(json.dumps({"error": str(e)}),
+                                     content_type='application/json', status=400)
+
+            # Extraction des autres paramètres
             takeaway = order_data.get('takeaway', False)
             discount_code = order_data.get('discount_code')
             mobile_user_id = order_data.get('mobile_user_id')
