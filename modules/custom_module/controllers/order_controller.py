@@ -82,12 +82,16 @@ class OrderController(PosSelfOrderController):
         :param restaurant_id: ID du restaurant
         :return: dict avec les détails de la remise ou None si pas applicable
         """
+        _logger.info(f"📱 apply_default_mobile_promo - amount_total: {amount_total}, restaurant_id: {restaurant_id}")
         config_model = request.env['restaurant.discount.config'].sudo()
         discount_config = config_model.get_default_mobile_promo_config(restaurant_id)
+        _logger.info(f"Config trouvée: {discount_config}")
 
         if not discount_config['enabled']:
+            _logger.warning(f"❌ Code promo par défaut désactivé (enabled=False)")
             return None
         if amount_total < discount_config['min_amount']:
+            _logger.warning(f"❌ Montant insuffisant: {amount_total} < {discount_config['min_amount']}")
             return None
 
         discount_percentage = discount_config['discount_percentage']
@@ -108,6 +112,7 @@ class OrderController(PosSelfOrderController):
             'discount_percentage': effective_percentage,
             'original_percentage': discount_percentage,
             'discount_name': discount_config['discount_name'],
+            'discount_code': discount_config.get('discount_code', 'AUTO'),
             'min_amount': discount_config['min_amount'],
             'max_discount': discount_config['max_discount'],
             'capped': discount_config['max_discount'] and discount_amount >= discount_config['max_discount']
@@ -257,13 +262,14 @@ class OrderController(PosSelfOrderController):
 
         return line_operations, total_before_discount
 
-    def process_discount_line(self, discount_info, existing_order, discount_code):
+    def process_discount_line(self, discount_info, existing_order, discount_code, is_auto=False):
         """
         Traite la ligne de remise (création ou mise à jour)
 
         :param discount_info: Informations de remise
         :param existing_order: Commande existante
         :param discount_code: Code de remise
+        :param is_auto: True si c'est une remise automatique (mobile par défaut)
         :return: Opération de ligne de remise
         """
         discount_product = self.get_or_create_discount_product(discount_info['discount_name'])
@@ -277,7 +283,7 @@ class OrderController(PosSelfOrderController):
                     break
 
         # Création de la note de remise
-        if discount_code == 'MOBILE_DEFAULT':
+        if is_auto:
             discount_note = f'Remise Mobile Self-Order {discount_info["discount_percentage"]:.1f}% (Automatique)'
         else:
             discount_note = f'Remise QR mobile {discount_info["discount_percentage"]:.1f}% (Code: {discount_code})'
@@ -554,6 +560,11 @@ class OrderController(PosSelfOrderController):
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
 
+            _logger.info(f"=== PARAMS REÇUS ===")
+            _logger.info(f"device_type: {device_type}")
+            _logger.info(f"origine: {order_data.get('origine')}")
+            _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
+            _logger.info(f"discount_code: {discount_code}")
             _logger.info(f"mobile_user_id reçu: {mobile_user_id}")
             _logger.info(f"subscription_id reçu: {subscription_id}")
             _logger.info(f"menupro_id reçu: {menupro_id}")
@@ -644,23 +655,38 @@ class OrderController(PosSelfOrderController):
 
             # Application de la remise QR mobile
             discount_info = None
+            _logger.info(f"=== VÉRIFICATION CODE PROMO ===")
+            _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
+            _logger.info(f"restaurant_id: {restaurant_id}")
+            _logger.info(f"total_before_discount: {total_before_discount}")
+            
             if is_qr_mobile_order and restaurant_id:
                 # Si un code promo spécifique est fourni, l'utiliser
                 if discount_code:
+                    _logger.info(f"Code promo spécifique fourni: {discount_code}")
                     discount_info = self.apply_qr_mobile_discount(total_before_discount, restaurant_id, discount_code)
                     if discount_info:
                         _logger.info(
                             f"Remise QR mobile appliquée (code spécifique) : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
                         discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code)
                         line_operations.append(discount_line_op)
+                    else:
+                        _logger.warning(f"Code promo {discount_code} non applicable")
                 else:
                     # Sinon, appliquer automatiquement le code promo par défaut pour mobile
+                    _logger.info("Tentative d'application du code promo mobile par défaut (is_mobile_default=True)")
                     discount_info = self.apply_default_mobile_promo(total_before_discount, restaurant_id)
+                    _logger.info(f"Résultat apply_default_mobile_promo: {discount_info}")
                     if discount_info:
                         _logger.info(
-                            f"Remise mobile par défaut appliquée automatiquement : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
-                        discount_line_op = self.process_discount_line(discount_info, existing_order, 'MOBILE_DEFAULT')
+                            f"✅ Remise mobile par défaut appliquée automatiquement : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
+                        discount_code_to_use = discount_info.get('discount_code', 'AUTO')
+                        discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code_to_use, is_auto=True)
                         line_operations.append(discount_line_op)
+                    else:
+                        _logger.warning("❌ Code promo mobile par défaut non applicable ou inexistant")
+            else:
+                _logger.info(f"Code promo ignoré - is_qr_mobile_order: {is_qr_mobile_order}, restaurant_id: {restaurant_id}")
 
             # Mise à jour ou création de commande
             if existing_order:

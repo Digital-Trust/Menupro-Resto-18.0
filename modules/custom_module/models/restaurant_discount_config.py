@@ -176,15 +176,18 @@ class RestaurantDiscountConfig(models.Model):
         cfg = self._get_config()
         if not restaurant_id:
             restaurant_id = cfg['restaurant_id']
-            
-        # Recherche du code promo par défaut pour mobile
+        
+        _logger.info(f"🔍 Recherche code promo mobile par défaut (is_mobile_default=True) pour restaurant_id: {restaurant_id}")
+        
         config = self.search([
             ('restaurant_id', '=', restaurant_id),
-            ('discount_code', '=', 'MOBILE_DEFAULT'),
+            ('is_mobile_default', '=', True),
             ('enabled', '=', True)
         ], limit=1)
 
         if not config:
+            _logger.warning(f"⚠️ Aucun code promo mobile par défaut trouvé pour restaurant_id={restaurant_id}")
+            _logger.info("Vérifiez qu'un code promo avec is_mobile_default=True existe et est activé")
             # Si pas de configuration trouvée, retourner une configuration par défaut
             return {
                 'enabled': False,
@@ -195,11 +198,14 @@ class RestaurantDiscountConfig(models.Model):
                 'expiration_date': None,
                 'start_date': None,
             }
+        
+        _logger.info(f"✅ Code promo mobile par défaut trouvé: {config.discount_name} ({config.discount_code}), {config.discount_percentage}%, min={config.min_amount}")
 
         return {
             'enabled': config.enabled,
             'discount_percentage': config.discount_percentage,
             'discount_name': config.discount_name,
+            'discount_code': config.discount_code,
             'min_amount': config.min_amount,
             'max_discount': config.max_discount or None,
         }
