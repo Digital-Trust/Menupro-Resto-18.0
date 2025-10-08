@@ -74,6 +74,45 @@ class OrderController(PosSelfOrderController):
             'capped': discount_config['max_discount'] and discount_amount >= discount_config['max_discount']
         }
 
+    def apply_default_mobile_promo(self, amount_total, restaurant_id=None):
+        """
+        Applique automatiquement le code promo par défaut pour mobile self-order
+
+        :param amount_total: Montant total de la commande
+        :param restaurant_id: ID du restaurant
+        :return: dict avec les détails de la remise ou None si pas applicable
+        """
+        config_model = request.env['restaurant.discount.config'].sudo()
+        discount_config = config_model.get_default_mobile_promo_config(restaurant_id)
+
+        if not discount_config['enabled']:
+            return None
+        if amount_total < discount_config['min_amount']:
+            return None
+
+        discount_percentage = discount_config['discount_percentage']
+        discount_amount = amount_total * (discount_percentage / 100)
+
+        # Appliquer le plafond si défini
+        if discount_config['max_discount'] and discount_amount > discount_config['max_discount']:
+            discount_amount = discount_config['max_discount']
+            effective_percentage = (discount_amount / amount_total) * 100
+        else:
+            effective_percentage = discount_percentage
+
+        new_total = amount_total - discount_amount
+
+        return {
+            'discount_amount': discount_amount,
+            'new_total': new_total,
+            'discount_percentage': effective_percentage,
+            'original_percentage': discount_percentage,
+            'discount_name': discount_config['discount_name'],
+            'min_amount': discount_config['min_amount'],
+            'max_discount': discount_config['max_discount'],
+            'capped': discount_config['max_discount'] and discount_amount >= discount_config['max_discount']
+        }
+
     def get_or_create_discount_product(self, discount_name):
         """
         Récupère ou crée un produit de remise
@@ -238,7 +277,10 @@ class OrderController(PosSelfOrderController):
                     break
 
         # Création de la note de remise
-        discount_note = f'Remise QR mobile {discount_info["discount_percentage"]:.1f}% (Code: {discount_code})'
+        if discount_code == 'MOBILE_DEFAULT':
+            discount_note = f'Remise Mobile Self-Order {discount_info["discount_percentage"]:.1f}% (Automatique)'
+        else:
+            discount_note = f'Remise QR mobile {discount_info["discount_percentage"]:.1f}% (Code: {discount_code})'
         if discount_info.get('capped'):
             discount_note += f' (plafonnée à {discount_info["max_discount"]}€)'
 
@@ -368,7 +410,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"=== END DEBUG ===")
 
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
-                         mobile_user_id=None, subscription_id=None, paid_online=None):
+                         mobile_user_id=None, subscription_id=None, paid_online=None, menupro_name=None):
         """
         Crée une nouvelle commande avec gestion des floatingOrder pour takeaway
         """
@@ -400,12 +442,14 @@ class OrderController(PosSelfOrderController):
         # *** GESTION TAKEAWAY - FLOATING ORDER ***
         if takeaway:
             # Pour takeaway, créer une floating order (sans table)
+            # Utiliser le nom du client s'il est fourni, sinon utiliser le format par défaut
+            floating_name = menupro_name if menupro_name else f"TKO-{sequence}"
             order_dict.update({
                 'table_id': False,
                 'takeaway': True,
-                'floating_order_name': f"TKO- {sequence}",
+                'floating_order_name': floating_name,
             })
-            _logger.info(f"Création d'une floating order takeaway: {sequence}")
+            _logger.info(f"Création d'une floating order takeaway: {floating_name}")
         else:
             # Pour dine-in, utiliser la table normale
             order_dict.update({
@@ -421,6 +465,7 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"menupro_id à créer: {menupro_id}")
         _logger.info(f"takeaway: {takeaway}")
         _logger.info(f"paid_online: {paid_online}")
+        _logger.info(f"menupro_name: {menupro_name}")
         _logger.info(f"table_id: {order_dict.get('table_id', 'None (Floating Order)')}")
         _logger.info(f"floating_order_name: {order_dict.get('floating_order_name', 'None')}")
         _logger.info(f"=== END CREATE DEBUG ===")
@@ -504,6 +549,7 @@ class OrderController(PosSelfOrderController):
             subscription_id = order_data.get('subscription_id')
             menupro_id = order_data.get('menupro_id')
             paid_online = order_data.get('paid_online', False)
+            menupro_name = order_data.get('menupro_name')
 
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
@@ -513,6 +559,7 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"menupro_id reçu: {menupro_id}")
             _logger.info(f"takeaway reçu: {takeaway}")
             _logger.info(f"paid_online reçu: {paid_online}")
+            _logger.info(f"menupro_name reçu: {menupro_name}")
 
             # Validation des paramètres requis
             required_params = [pos_config_id, access_token]
@@ -555,6 +602,7 @@ class OrderController(PosSelfOrderController):
             # Assurance de l'existence de la configuration de remise
             if restaurant_id:
                 request.env['restaurant.discount.config'].sudo().ensure_config_exists()
+     
 
             # *** RECHERCHE DE COMMANDE EXISTANTE - ADAPTÉE TAKEAWAY ***
             if takeaway:
@@ -596,13 +644,23 @@ class OrderController(PosSelfOrderController):
 
             # Application de la remise QR mobile
             discount_info = None
-            if is_qr_mobile_order and restaurant_id and discount_code:
-                discount_info = self.apply_qr_mobile_discount(total_before_discount, restaurant_id, discount_code)
-                if discount_info:
-                    _logger.info(
-                        f"Remise QR mobile appliquée : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
-                    discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code)
-                    line_operations.append(discount_line_op)
+            if is_qr_mobile_order and restaurant_id:
+                # Si un code promo spécifique est fourni, l'utiliser
+                if discount_code:
+                    discount_info = self.apply_qr_mobile_discount(total_before_discount, restaurant_id, discount_code)
+                    if discount_info:
+                        _logger.info(
+                            f"Remise QR mobile appliquée (code spécifique) : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
+                        discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code)
+                        line_operations.append(discount_line_op)
+                else:
+                    # Sinon, appliquer automatiquement le code promo par défaut pour mobile
+                    discount_info = self.apply_default_mobile_promo(total_before_discount, restaurant_id)
+                    if discount_info:
+                        _logger.info(
+                            f"Remise mobile par défaut appliquée automatiquement : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
+                        discount_line_op = self.process_discount_line(discount_info, existing_order, 'MOBILE_DEFAULT')
+                        line_operations.append(discount_line_op)
 
             # Mise à jour ou création de commande
             if existing_order:
@@ -637,7 +695,8 @@ class OrderController(PosSelfOrderController):
                     menupro_id,
                     mobile_user_id,
                     subscription_id,
-                    paid_online
+                    paid_online,
+                    menupro_name
                 )
                 response_data = self.build_response_data(
                     new_order_result,
