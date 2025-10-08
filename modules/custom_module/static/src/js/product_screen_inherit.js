@@ -27,7 +27,6 @@ patch(ProductScreen.prototype, {
     );
   },
 
-  // Vérifier si l'utilisateur est manager ou admin
   isManagerOrAdmin() {
     const cashier = this.pos.get_cashier();
     return (
@@ -57,7 +56,6 @@ patch(ProductScreen.prototype, {
       return;
     }
 
-    // Empêcher l'utilisation du bouton "price" pour les non-managers
     if (buttonValue === "price" && !this.isManagerOrAdmin()) {
       console.log("Price button disabled: user is not manager or admin");
       this.notification.add(_t("Only managers can modify prices"), {

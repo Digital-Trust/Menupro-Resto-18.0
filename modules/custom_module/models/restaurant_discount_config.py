@@ -22,12 +22,43 @@ class RestaurantDiscountConfig(models.Model):
     max_discount = fields.Float(string='Remise maximum', default=0.0)
     menupro_id = fields.Char(string='MenuPro ID')
     is_mobile_default = fields.Boolean(string='Code promo mobile par défaut', default=False, help="Identifie le code promo par défaut pour les commandes mobile self-order")
+    
+    # Type de limitation
+    limitation_type = fields.Selection([
+        ('usage', 'Limitation par nombre d\'utilisations'),
+        ('dates', 'Limitation par dates'),
+        ('always', 'Toujours disponible (illimité)'),
+    ], string='Type de limitation', default='always', required=True, 
+       help="Choisissez comment limiter l'utilisation de ce code promo")
+    
+    # Champs de limitation par dates
     expiration_date = fields.Date(string='Date d\'expiration', help="Date d'expiration de la remise")
     start_date = fields.Date(string='Date de début', help="Date de début de la remise")
+    
+    # Champs de limitation par usage
+    max_usage = fields.Integer(string='Nombre d\'utilisations max', default=0, help="Nombre maximum d'utilisations du code (0 = épuisé)")
+    
+    # Champs calculés/anciens (pour compatibilité)
+    always_available = fields.Boolean(string='Toujours disponible', compute='_compute_always_available', store=True)
+    dates_readonly = fields.Boolean(compute='_compute_fields_readonly', store=False)
+    usage_readonly = fields.Boolean(compute='_compute_fields_readonly', store=False)
 
     _sql_constraints = [
         ('discount_code_uniq', 'unique(discount_code)', "Le code de remise doit être unique !"),
     ]
+
+    @api.depends('limitation_type')
+    def _compute_always_available(self):
+        """Calcule always_available pour compatibilité avec l'ancien code"""
+        for record in self:
+            record.always_available = (record.limitation_type == 'always')
+
+    @api.depends('limitation_type')
+    def _compute_fields_readonly(self):
+        """Gère les champs readonly selon le type de limitation"""
+        for record in self:
+            record.dates_readonly = (record.limitation_type != 'dates')
+            record.usage_readonly = (record.limitation_type != 'usage')
 
     def _get_config(self):
         """Charge et valide la config une seule fois par thread."""
@@ -65,8 +96,11 @@ class RestaurantDiscountConfig(models.Model):
             "minAmount": self.min_amount,
             "maxDiscount": self.max_discount,
             "isMobileDefault": self.is_mobile_default,
+            "limitationType": self.limitation_type,
             "expirationDate": self.expiration_date,
             "startDate": self.start_date,
+            "alwaysAvailable": self.always_available,
+            "maxUsage": self.max_usage,
         }
 
     def _call_mp(self, method, url, json=None):
@@ -113,18 +147,57 @@ class RestaurantDiscountConfig(models.Model):
                 raise ValidationError(
                     "Le pourcentage de remise doit être renseigné et supérieur à 0 si la remise est activée.")
 
+    @api.constrains('enabled', 'start_date', 'expiration_date', 'max_usage', 'limitation_type')
+    def _check_activation_rules(self):
+        for record in self:
+            if not record.enabled:
+                continue
+            
+            # Validation selon le type de limitation
+            if record.limitation_type == 'dates':
+                # Mode dates : vérifier les dates
+                today = fields.Date.context_today(record)
+                
+                if not record.start_date and not record.expiration_date:
+                    raise ValidationError(
+                        f"Pour le code '{record.discount_code}', vous devez définir au moins une date "
+                        f"(début ou expiration) en mode 'Limitation par dates'."
+                    )
+                
+                if record.start_date and record.start_date > today:
+                    raise ValidationError(
+                        f"Impossible d'activer le code '{record.discount_code}'. "
+                        f"La date de début ({record.start_date}) n'est pas encore atteinte."
+                    )
+                
+                if record.expiration_date and record.expiration_date < today:
+                    raise ValidationError(
+                        f"Impossible d'activer le code '{record.discount_code}'. "
+                        f"La date d'expiration ({record.expiration_date}) est dépassée."
+                    )
+            
+            elif record.limitation_type == 'usage':
+                # Mode usage : vérifier le nombre d'utilisations
+                if record.max_usage is None or record.max_usage <= 0:
+                    raise ValidationError(
+                        f"Impossible d'activer le code '{record.discount_code}'. "
+                        f"Le nombre d'utilisations maximum est atteint ou invalide. "
+                        f"Définissez un nombre > 0."
+                    )
+            
+            # Mode 'always' : pas de validation particulière
+
     def write(self, vals):
         if 'restaurant_id' in vals:
             del vals['restaurant_id']
-
 
         res = super().write(vals)
 
         cfg = self._get_config()
         base = cfg['restaurant-discount_url']
 
-        try:
-            for rec in self:
+        for rec in self:
+            try:
                 payload = rec._build_payload()
 
                 if not rec.menupro_id:
@@ -133,8 +206,8 @@ class RestaurantDiscountConfig(models.Model):
                 else:
                     rec._call_mp("PATCH", f"{base}/{rec.menupro_id}", payload)
 
-        except Exception as e:
-            _logger.error("Failed to sync discount config %s with MenuPro: %s", rec.id, e)
+            except Exception as e:
+                _logger.error("Failed to sync discount config %s with MenuPro: %s", rec.id, e)
 
         return res
 
@@ -146,6 +219,8 @@ class RestaurantDiscountConfig(models.Model):
         if not discount_code:
             return self._get_default_config()
 
+        _logger.info(f"🔍 Recherche code promo: {discount_code} pour restaurant: {restaurant_id}")
+
         config = self.search([
             ('restaurant_id', '=', restaurant_id),
             ('discount_code', '=', discount_code),
@@ -153,8 +228,30 @@ class RestaurantDiscountConfig(models.Model):
         ], limit=1)
 
         if not config:
+            _logger.warning(f"❌ Code promo {discount_code} NON TROUVÉ ou DÉSACTIVÉ pour restaurant_id={restaurant_id}")
+            # Chercher sans le filtre enabled pour debug
+            config_any = self.search([
+                ('restaurant_id', '=', restaurant_id),
+                ('discount_code', '=', discount_code),
+            ], limit=1)
+            if config_any:
+                _logger.warning(f"⚠️ Code promo existe mais enabled={config_any.enabled}")
             return self._get_default_config()
 
+        # Vérifier si le code est vraiment actif (dates et usage)
+        _logger.info(f"✅ Code promo {discount_code} trouvé: enabled={config.enabled}, max_usage={config.max_usage}, always_available={config.always_available}, start_date={config.start_date}, expiration_date={config.expiration_date}")
+        
+        if not config.is_promo_active():
+            today = fields.Date.context_today(config)
+            _logger.warning(f"❌ Code promo {discount_code} trouvé mais NON ACTIF:")
+            _logger.warning(f"   - enabled: {config.enabled}")
+            _logger.warning(f"   - max_usage: {config.max_usage} (doit être > 0 si défini)")
+            _logger.warning(f"   - always_available: {config.always_available}")
+            _logger.warning(f"   - start_date: {config.start_date} (aujourd'hui: {today})")
+            _logger.warning(f"   - expiration_date: {config.expiration_date} (aujourd'hui: {today})")
+            return self._get_default_config()
+
+        _logger.info(f"✅ Code promo {discount_code} VALIDE et ACTIF - {config.discount_percentage}% de remise")
         return {
             'enabled': config.enabled,
             'discount_percentage': config.discount_percentage,
@@ -163,6 +260,7 @@ class RestaurantDiscountConfig(models.Model):
             'max_discount': config.max_discount or None,
             'expiration_date': config.expiration_date or None,
             'start_date': config.start_date or None,
+            'max_usage': config.max_usage,
         }
 
     @api.model
@@ -259,6 +357,12 @@ class RestaurantDiscountConfig(models.Model):
             if record.max_discount < 0:
                 raise ValidationError("La remise maximum ne peut pas être négative")
 
+    @api.constrains('max_usage')
+    def _check_max_usage(self):
+        for record in self:
+            if record.max_usage is not None and record.max_usage < 0:
+                raise ValidationError("Le nombre maximum d'utilisations ne peut pas être négatif")
+
     @api.ondelete(at_uninstall=False)
     def _unlink(self):
         """Called automatically before unlink - sync deletion with external service"""
@@ -334,13 +438,71 @@ class RestaurantDiscountConfig(models.Model):
         if not self.enabled:
             return False
         
-        # Vérifier la date de début
-        if self.start_date and check_date < self.start_date:
-            return False
+        # Vérifier selon le type de limitation
+        if self.limitation_type == 'usage':
+            # Mode usage : vérifier le compteur d'utilisations
+            if self.max_usage is None or self.max_usage <= 0:
+                return False
         
-        # Vérifier la date d'expiration
-        if self.expiration_date and check_date > self.expiration_date:
-            return False
+        elif self.limitation_type == 'dates':
+            # Mode dates : vérifier les dates
+            if self.start_date and check_date < self.start_date:
+                return False
+            if self.expiration_date and check_date > self.expiration_date:
+                return False
+        
+        # Mode 'always' : toujours actif si enabled
+        return True
+
+    def decrement_usage(self):
+        """Décrémente le compteur d'utilisation du code promo (uniquement en mode 'usage')"""
+        self.ensure_one()
+        
+        # Ne décrementer que si le code utilise la limitation par usage
+        if self.limitation_type != 'usage':
+            _logger.info(f"Code promo {self.discount_code}: pas de décrément (mode {self.limitation_type})")
+            return
+        
+        if self.max_usage > 0:
+            new_usage = self.max_usage - 1
+            # Utiliser SQL directe pour éviter les contraintes et améliorer les performances
+            self.env.cr.execute(
+                "UPDATE restaurant_discount_config SET max_usage = %s, enabled = %s WHERE id = %s",
+                (new_usage, False if new_usage == 0 else self.enabled, self.id)
+            )
+            self.invalidate_recordset(['max_usage', 'enabled'])
+            _logger.info(f"Code promo {self.discount_code}: utilisations restantes = {new_usage}")
+            if new_usage == 0:
+                _logger.info(f"Code promo {self.discount_code} automatiquement désactivé (limite atteinte)")
+
+    @api.model
+    def cron_deactivate_expired_codes(self):
+        """CRON job pour désactiver automatiquement les codes expirés"""
+        today = fields.Date.context_today(self)
+        
+        # Désactiver les codes expirés par date (mode 'dates' uniquement)
+        expired_by_date = self.search([
+            ('enabled', '=', True),
+            ('limitation_type', '=', 'dates'),
+            ('expiration_date', '<', today)
+        ])
+        
+        if expired_by_date:
+            expired_by_date.write({'enabled': False})
+            _logger.info(f"Codes expirés par date désactivés: {len(expired_by_date)} code(s) - {expired_by_date.mapped('discount_code')}")
+        
+        # Désactiver les codes ayant atteint leur limite d'utilisation (mode 'usage' uniquement)
+        # Note: decrement_usage() désactive déjà automatiquement quand max_usage atteint 0
+        # Mais on vérifie quand même au cas où
+        usage_limit_reached = self.search([
+            ('enabled', '=', True),
+            ('limitation_type', '=', 'usage'),
+            ('max_usage', '<=', 0)
+        ])
+        
+        if usage_limit_reached:
+            usage_limit_reached.write({'enabled': False})
+            _logger.info(f"Codes épuisés désactivés: {len(usage_limit_reached)} code(s) - {usage_limit_reached.mapped('discount_code')}")
         
         return True
 

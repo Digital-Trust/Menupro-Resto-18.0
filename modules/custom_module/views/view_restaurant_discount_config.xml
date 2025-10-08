@@ -11,7 +11,6 @@
                         </h1>
                     </div>
                     <group>
-                        <field name="restaurant_id" readonly="1"/>
                         <field name="is_mobile_default" string="Code Promo Mobile par Défaut" help="Marquer ce code promo comme étant le code par défaut pour les commandes mobile self-order"/>
                         <field name="discount_code" required="1"/>
                         <field name="enabled"/>
@@ -19,9 +18,17 @@
                         <field name="min_amount"/>
                         <field name="max_discount" help="Laisser vide pour pas de plafond"/>
                     </group>
-                    <group string="Dates de validité">
-                        <field name="start_date" help="Date de début de validité du code promo (optionnel)"/>
-                        <field name="expiration_date" help="Date d'expiration du code promo (optionnel)"/>
+                    <group string="Type de limitation">
+                        <field name="limitation_type" widget="radio" help="Choisissez comment limiter l'utilisation de ce code promo"/>
+                    </group>
+                    <group string="Limitation par nombre d'utilisations" invisible="limitation_type != 'usage'">
+                        <field name="usage_readonly" invisible="1"/>
+                        <field name="max_usage" help="Nombre maximum d'utilisations (désactivé automatiquement à 0)" readonly="usage_readonly" required="limitation_type == 'usage'"/>
+                    </group>
+                    <group string="Limitation par dates" invisible="limitation_type != 'dates'">
+                        <field name="dates_readonly" invisible="1"/>
+                        <field name="start_date" help="Date de début de validité du code promo" readonly="dates_readonly"/>
+                        <field name="expiration_date" help="Date d'expiration du code promo" readonly="dates_readonly"/>
                     </group>
                 </sheet>
             </form>
@@ -33,7 +40,6 @@
         <field name="model">restaurant.discount.config</field>
         <field name="arch" type="xml">
             <list string="Configurations de Remises">
-                <field name="restaurant_id"/>
                 <field name="discount_code"/>
                 <field name="discount_name"/>
                 <field name="is_mobile_default" string="Mobile par Défaut" widget="boolean_toggle"/>
@@ -41,8 +47,10 @@
                 <field name="discount_percentage" string="Remise (%)"/>
                 <field name="min_amount" string="Montant min"/>
                 <field name="max_discount" string="Plafond"/>
-                <field name="start_date" string="Date début"/>
-                <field name="expiration_date" string="Date fin"/>
+                <field name="limitation_type" string="Type"/>
+                <field name="max_usage" string="Utilisations" optional="show"/>
+                <field name="start_date" string="Date début" optional="show"/>
+                <field name="expiration_date" string="Date fin" optional="show"/>
             </list>
 
         </field>
@@ -54,16 +62,25 @@
         <field name="arch" type="xml">
             <search string="Recherche Configuration Remise">
                 <field name="discount_name"/>
-                <field name="restaurant_id"/>
+                <field name="discount_code"/>
                 <field name="start_date"/>
                 <field name="expiration_date"/>
                 <filter name="enabled" string="Activées" domain="[('enabled', '=', True)]"/>
                 <filter name="disabled" string="Désactivées" domain="[('enabled', '=', False)]"/>
+                <separator/>
                 <filter name="mobile_default" string="Mobile par défaut" domain="[('is_mobile_default', '=', True)]"/>
                 <filter name="regular_promos" string="Codes promo normaux" domain="[('is_mobile_default', '=', False)]"/>
-                <filter name="active_promos" string="Promos actives" domain="[('enabled', '=', True), ('start_date', '&lt;=', context_today()), ('expiration_date', '&gt;=', context_today())]"/>
-                <filter name="expired_promos" string="Promos expirées" domain="[('expiration_date', '&lt;', context_today())]"/>
-                <filter name="future_promos" string="Promos futures" domain="[('start_date', '&gt;', context_today())]"/>
+                <separator/>
+                <filter name="type_always" string="Illimités" domain="[('limitation_type', '=', 'always')]"/>
+                <filter name="type_usage" string="Par nombre d'utilisations" domain="[('limitation_type', '=', 'usage')]"/>
+                <filter name="type_dates" string="Par dates" domain="[('limitation_type', '=', 'dates')]"/>
+                <separator/>
+                <filter name="usage_available" string="Utilisations disponibles" domain="[('limitation_type', '=', 'usage'), ('max_usage', '&gt;', 0)]"/>
+                <filter name="usage_exhausted" string="Utilisations épuisées" domain="[('limitation_type', '=', 'usage'), ('max_usage', '=', 0)]"/>
+                <separator/>
+                <filter name="active_by_date" string="Actives par date" domain="[('limitation_type', '=', 'dates'), ('enabled', '=', True), ('start_date', '&lt;=', context_today()), ('expiration_date', '&gt;=', context_today())]"/>
+                <filter name="expired_promos" string="Expirées" domain="[('limitation_type', '=', 'dates'), ('expiration_date', '&lt;', context_today())]"/>
+                <filter name="future_promos" string="Futures" domain="[('limitation_type', '=', 'dates'), ('start_date', '&gt;', context_today())]"/>
             </search>
         </field>
     </record>

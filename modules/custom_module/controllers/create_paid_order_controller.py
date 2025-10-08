@@ -467,6 +467,16 @@ class CreatePaidOrderController(http.Controller):
             except Exception:
                 _logger.exception("Erreur lors de la finalisation de la commande après paiement")
 
+            # Décrémenter le compteur d'utilisation du code promo si applicable
+            if discount_code and discount_info:
+                config_model = request.env['restaurant.discount.config'].sudo()
+                discount_record = config_model.search([
+                    ('restaurant_id', '=', restaurant_id),
+                    ('discount_code', '=', discount_code)
+                ], limit=1)
+                if discount_record:
+                    discount_record.decrement_usage()
+
             # Construction de la réponse
             response_data = self.build_response_data(
                 order,

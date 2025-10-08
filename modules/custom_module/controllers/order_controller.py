@@ -82,10 +82,9 @@ class OrderController(PosSelfOrderController):
         :param restaurant_id: ID du restaurant
         :return: dict avec les détails de la remise ou None si pas applicable
         """
-        _logger.info(f"📱 apply_default_mobile_promo - amount_total: {amount_total}, restaurant_id: {restaurant_id}")
         config_model = request.env['restaurant.discount.config'].sudo()
         discount_config = config_model.get_default_mobile_promo_config(restaurant_id)
-        _logger.info(f"Config trouvée: {discount_config}")
+        # _logger.info(f"Config trouvée: {discount_config}")
 
         if not discount_config['enabled']:
             _logger.warning(f"❌ Code promo par défaut désactivé (enabled=False)")
@@ -338,7 +337,7 @@ class OrderController(PosSelfOrderController):
             update_values['subscription_id'] = subscription_id
         if paid_online is not None:
             update_values['paid_online'] = paid_online
-            _logger.info(f"Mise à jour paid_online: {paid_online}")
+            # _logger.info(f"Mise à jour paid_online: {paid_online}")
         # Gestion du changement takeaway
         if takeaway != existing_order.takeaway:
             update_values['takeaway'] = takeaway
@@ -347,7 +346,7 @@ class OrderController(PosSelfOrderController):
                 # Conversion vers floating order
                 update_values['table_id'] = False
                 update_values['floating_order_name'] = f"Takeaway {existing_order.name}"
-                _logger.info(f"Conversion de la commande {existing_order.name} vers floating order (takeaway)")
+                # _logger.info(f"Conversion de la commande {existing_order.name} vers floating order (takeaway)")
             else:
                 # Conversion de takeaway vers dine-in
                 if not existing_order.table_id:
@@ -455,26 +454,14 @@ class OrderController(PosSelfOrderController):
                 'takeaway': True,
                 'floating_order_name': floating_name,
             })
-            _logger.info(f"Création d'une floating order takeaway: {floating_name}")
+            # _logger.info(f"Création d'une floating order takeaway: {floating_name}")
         else:
             # Pour dine-in, utiliser la table normale
             order_dict.update({
                 'table_id': restaurant_table.id,
                 'takeaway': False,
             })
-            _logger.info(f"Création d'une commande table: {restaurant_table.table_number}")
-
-        # *** DEBUG : Log des valeurs avant création ***
-        _logger.info(f"=== CREATE ORDER DEBUG ===")
-        _logger.info(f"mobile_user_id à créer: {mobile_user_id}")
-        _logger.info(f"subscription_id à créer: {subscription_id}")
-        _logger.info(f"menupro_id à créer: {menupro_id}")
-        _logger.info(f"takeaway: {takeaway}")
-        _logger.info(f"paid_online: {paid_online}")
-        _logger.info(f"menupro_name: {menupro_name}")
-        _logger.info(f"table_id: {order_dict.get('table_id', 'None (Floating Order)')}")
-        _logger.info(f"floating_order_name: {order_dict.get('floating_order_name', 'None')}")
-        _logger.info(f"=== END CREATE DEBUG ===")
+            # _logger.info(f"Création d'une commande table: {restaurant_table.table_number}")
 
         # Pour les floating orders, pas besoin de table_identifier
         table_identifier = restaurant_table.identifier if restaurant_table else None
@@ -560,18 +547,6 @@ class OrderController(PosSelfOrderController):
             is_qr_mobile_order = (device_type == 'mobile' and
                                   order_data.get('origine') == 'mobile')
 
-            _logger.info(f"=== PARAMS REÇUS ===")
-            _logger.info(f"device_type: {device_type}")
-            _logger.info(f"origine: {order_data.get('origine')}")
-            _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
-            _logger.info(f"discount_code: {discount_code}")
-            _logger.info(f"mobile_user_id reçu: {mobile_user_id}")
-            _logger.info(f"subscription_id reçu: {subscription_id}")
-            _logger.info(f"menupro_id reçu: {menupro_id}")
-            _logger.info(f"takeaway reçu: {takeaway}")
-            _logger.info(f"paid_online reçu: {paid_online}")
-            _logger.info(f"menupro_name reçu: {menupro_name}")
-
             # Validation des paramètres requis
             required_params = [pos_config_id, access_token]
             if not takeaway:
@@ -608,7 +583,6 @@ class OrderController(PosSelfOrderController):
 
             # Récupération de l'ID du restaurant
             restaurant_id = request.env['ir.config_parameter'].sudo().get_param('restaurant_id')
-            _logger.info(f"Restaurant ID utilisé : {restaurant_id}")
 
             # Assurance de l'existence de la configuration de remise
             if restaurant_id:
@@ -625,9 +599,6 @@ class OrderController(PosSelfOrderController):
                     ('takeaway', '=', True),
                     ('mobile_user_id', '=', mobile_user_id),
                 ], limit=1)
-
-                _logger.info(
-                    f"Recherche floating order takeaway - mobile_user_id: {mobile_user_id}, trouvée: {bool(existing_order)}")
             else:
                 # Pour dine-in, chercher par table comme avant
                 existing_order = request.env['pos.order'].sudo().search([
@@ -635,11 +606,6 @@ class OrderController(PosSelfOrderController):
                     ('session_id', '=', pos_config.current_session_id.id),
                     ('state', '=', 'draft')
                 ], limit=1)
-
-                _logger.info(f"Recherche commande table {restaurant_table.table_number}, trouvée: {bool(existing_order)}")
-
-            _logger.info(f"Commande existante trouvée: {existing_order.name if existing_order else 'Aucune'}")
-
             # Calcul du total avant remise
             discount_config = None
             discount_product_name = None
@@ -655,31 +621,20 @@ class OrderController(PosSelfOrderController):
 
             # Application de la remise QR mobile
             discount_info = None
-            _logger.info(f"=== VÉRIFICATION CODE PROMO ===")
-            _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
-            _logger.info(f"restaurant_id: {restaurant_id}")
-            _logger.info(f"total_before_discount: {total_before_discount}")
-            
+
             if is_qr_mobile_order and restaurant_id:
                 # Si un code promo spécifique est fourni, l'utiliser
                 if discount_code:
-                    _logger.info(f"Code promo spécifique fourni: {discount_code}")
                     discount_info = self.apply_qr_mobile_discount(total_before_discount, restaurant_id, discount_code)
                     if discount_info:
-                        _logger.info(
-                            f"Remise QR mobile appliquée (code spécifique) : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
                         discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code)
                         line_operations.append(discount_line_op)
                     else:
                         _logger.warning(f"Code promo {discount_code} non applicable")
                 else:
                     # Sinon, appliquer automatiquement le code promo par défaut pour mobile
-                    _logger.info("Tentative d'application du code promo mobile par défaut (is_mobile_default=True)")
                     discount_info = self.apply_default_mobile_promo(total_before_discount, restaurant_id)
-                    _logger.info(f"Résultat apply_default_mobile_promo: {discount_info}")
                     if discount_info:
-                        _logger.info(
-                            f"✅ Remise mobile par défaut appliquée automatiquement : {discount_info['discount_amount']:.2f}€ sur {total_before_discount:.2f}€")
                         discount_code_to_use = discount_info.get('discount_code', 'AUTO')
                         discount_line_op = self.process_discount_line(discount_info, existing_order, discount_code_to_use, is_auto=True)
                         line_operations.append(discount_line_op)
@@ -690,7 +645,7 @@ class OrderController(PosSelfOrderController):
 
             # Mise à jour ou création de commande
             if existing_order:
-                _logger.info("=== MISE À JOUR COMMANDE EXISTANTE ===")
+                # _logger.info("=== MISE À JOUR COMMANDE EXISTANTE ===")
                 updated_order = self.update_existing_order(
                     existing_order,
                     line_operations,
@@ -734,20 +689,22 @@ class OrderController(PosSelfOrderController):
                     subscription_id=subscription_id
                 )
 
-            # Debug de la réponse
-            _logger.info(f"=== RESPONSE DATA DEBUG ===")
-            if isinstance(response_data, dict):
-                _logger.info(f"Response keys: {list(response_data.keys())}")
-                _logger.info(f"takeaway in response: {response_data.get('takeaway', 'NOT_FOUND')}")
-                _logger.info(f"mobile_user_id in response: {response_data.get('mobile_user_id', 'NOT_FOUND')}")
-            _logger.info(f"=== END RESPONSE DEBUG ===")
-
+                if discount_info:
+                    config_model = request.env['restaurant.discount.config'].sudo()
+                    # Récupérer le code promo utilisé (soit fourni explicitement, soit le code par défaut)
+                    code_used = discount_code if discount_code else discount_info.get('discount_code')
+                    if code_used and code_used != 'AUTO':
+                        discount_record = config_model.search([
+                            ('restaurant_id', '=', restaurant_id),
+                            ('discount_code', '=', code_used)
+                        ], limit=1)
+                        if discount_record:
+                            discount_record.decrement_usage()
             # Retour de la réponse
             json_response = json.dumps(response_data, default=json_default)
             return http.Response(json_response, content_type='application/json', status=200)
 
         except Exception as e:
-            _logger.exception("Error processing mobile order: %s", str(e))
             return http.Response(json.dumps({"error": str(e)}), content_type='application/json', status=500)
 
 

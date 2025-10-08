@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- CRON job pour désactiver automatiquement les codes promo expirés -->
+    <record id="ir_cron_deactivate_expired_discount_codes" model="ir.cron">
+        <field name="name">Désactiver les codes promo expirés</field>
+        <field name="model_id" ref="model_restaurant_discount_config"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_deactivate_expired_codes()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">hours</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>
+
