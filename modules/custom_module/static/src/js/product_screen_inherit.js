@@ -16,12 +16,8 @@ patch(ProductScreen.prototype, {
       clicked: false,
     });
     const currentOrder = this.pos.get_order();
-    if (currentOrder && currentOrder.takeaway == true) {
-      console.log("currentOrder.takeaway", currentOrder.takeaway);
-    }
   },
 
-  // Vérifier si l'ordre est en mode takeaway
   get isTakeawayMode() {
     const currentOrder = this.pos.get_order();
     return (
@@ -73,7 +69,6 @@ patch(ProductScreen.prototype, {
     return super.onNumpadClick(...arguments);
   },
 
-  // Méthode pour empêcher le clic sur ProductCard via le template
   onProductCardClick(product) {
     if (this.isTakeawayMode) {
       console.log("Product click disabled: order is takeaway");
@@ -109,7 +104,6 @@ patch(ProductScreen.prototype, {
       Backspace: "o_colorlist_item_color_transparent_1",
       "-": "o_colorlist_item_color_transparent_3",
     };
-
     return getButtons(DEFAULT_LAST_ROW, [
       {
         value: "quantity",

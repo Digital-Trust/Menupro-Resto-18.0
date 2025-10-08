@@ -20,7 +20,7 @@
                 </button>
         </xpath>
         <xpath expr="//button[@class='more-btn btn btn-light btn-lg flex-shrink-0']" position="replace">
-            <button class="more-btn btn btn-light btn-lg flex-shrink-0" t-att-class="{'ms-auto': !this.pos.showSaveOrderButton}" t-if="!props.showRemainingButtons and !ui.isSmall and props.onClickMore" t-on-click="props.onClickMore" t-att-disabled="pos.get_order()?.takeaway === true">
+            <button class="more-btn btn btn-light btn-lg flex-shrink-0" t-att-class="{'ms-auto': !this.pos.showSaveOrderButton}" t-if="!props.showRemainingButtons and !ui.isSmall and props.onClickMore" t-on-click="props.onClickMore" t-att-disabled="pos.get_order()?.takeaway === true and !pos.get_order()?.table_id">
                 Actions
             </button>
         </xpath>
