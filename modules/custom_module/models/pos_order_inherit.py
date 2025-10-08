@@ -286,10 +286,10 @@ class PosOrder(models.Model):
                 except json.JSONDecodeError:
                     pass
 
-            # Process all order lines
-            for line_id in order_data['lines']:
-                line = self.env['pos.order.line'].sudo().search([('id', '=', line_id)], limit=1)
-                if not line:
+            lines = self.env['pos.order.line'].sudo().browse(order_data['lines'])
+            
+            for line in lines:
+                if not line.exists():
                     continue
 
                 line_data = {

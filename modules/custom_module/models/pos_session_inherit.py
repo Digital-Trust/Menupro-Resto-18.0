@@ -157,14 +157,21 @@ class PosSession(models.Model):
                     f"Déduction des composants."
                 )
 
+                component_tmpl_ids = bom.bom_line_ids.mapped('product_id.product_tmpl_id.id')
+                sub_boms_dict = {}
+                if component_tmpl_ids:
+                    sub_boms = self.env['mrp.bom'].search([
+                        ('product_tmpl_id', 'in', component_tmpl_ids)
+                    ])
+                    # Create a dict for quick lookup
+                    for sub_bom in sub_boms:
+                        sub_boms_dict[sub_bom.product_tmpl_id.id] = sub_bom
+
                 for bom_line in bom.bom_line_ids:
                     component = bom_line.product_id
                     qty_to_deduct = bom_line.product_qty * quantity
 
-                    # Vérifier si le composant a lui-même une nomenclature
-                    sub_bom = self.env['mrp.bom'].search([
-                        ('product_tmpl_id', '=', component.product_tmpl_id.id)
-                    ], limit=1)
+                    sub_bom = sub_boms_dict.get(component.product_tmpl_id.id)
 
                     if sub_bom:
                         # Appel récursif pour le sous-composant
@@ -290,14 +297,22 @@ class PosSession(models.Model):
                 ))
             else:
                 # Pour les autres types, vérifier les composants
+                # Optimized: Pre-fetch all sub-BOMs to avoid N+1 queries
+                component_tmpl_ids = bom.bom_line_ids.mapped('product_id.product_tmpl_id.id')
+                sub_boms_dict = {}
+                if component_tmpl_ids:
+                    sub_boms = self.env['mrp.bom'].search([
+                        ('product_tmpl_id', 'in', component_tmpl_ids)
+                    ])
+                    for sub_bom in sub_boms:
+                        sub_boms_dict[sub_bom.product_tmpl_id.id] = sub_bom
+
                 for bom_line in bom.bom_line_ids:
                     component = bom_line.product_id
                     qty_to_check = bom_line.product_qty * quantity
                     component_path = f"{path} > {component.name}" if path else component.name
 
-                    sub_bom = self.env['mrp.bom'].search([
-                        ('product_tmpl_id', '=', component.product_tmpl_id.id)
-                    ], limit=1)
+                    sub_bom = sub_boms_dict.get(component.product_tmpl_id.id)
 
                     if sub_bom and component.id not in processed_products:
                         sub_errors = self.check_component_stock_recursively(

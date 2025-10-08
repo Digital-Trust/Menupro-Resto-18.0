@@ -111,13 +111,8 @@ class ProductTemplate(models.Model):
         else:
             pos_categ_ids = [pos_categ_ids]
         
-        # Check if any pos_category has menupro_id
-        for pos_categ_id in pos_categ_ids:
-            pos_category = self.env['pos.category'].browse(pos_categ_id)
-            if pos_category.exists() and pos_category.menupro_id:
-                return True
-        
-        return False
+        categories = self.env['pos.category'].browse(pos_categ_ids).exists()
+        return any(categories.mapped('menupro_id'))
 
     def _process_single_product(self, vals):
         """Helper method to process a single product creation."""
@@ -168,10 +163,10 @@ class ProductTemplate(models.Model):
         """ Check if product should be created in MenuPro during update (no menupro_id but has pos_category) """
         if not product.pos_categ_ids:
             return False
-        # Check if any pos_category has menupro_id
-        for pos_category in product.pos_categ_ids:
-            if pos_category.menupro_id:
-                return True
+        # Check if any pos_category has menupro_id - Optimized to avoid N+1
+        # Use any() with mapped() to check in one operation
+        if any(product.pos_categ_ids.mapped('menupro_id')):
+            return True
         
         _logger.debug("Product %s has pos_category but none have menupro_id - skipping MenuPro creation", product.name)
         return False
@@ -393,17 +388,17 @@ class ProductTemplate(models.Model):
             except (ValueError, TypeError):
                 return None
 
-        # Find first POS category with menupro_id
-        for pos_categ_id in category_ids:
-            try:
-                pos_category = self.env['pos.category'].browse(int(pos_categ_id))
-                if pos_category.exists() and pos_category.menupro_id:
+        # Find first POS category with menupro_id - Optimized to avoid N+1
+        # Browse all categories at once instead of one by one
+        try:
+            categories = self.env['pos.category'].browse([int(cid) for cid in category_ids]).exists()
+            for pos_category in categories:
+                if pos_category.menupro_id:
                     _logger.debug("Using menuCateg from POS category '%s' with menupro_id: %s", 
                                  pos_category.name, pos_category.menupro_id)
                     return pos_category.menupro_id
-            except Exception as e:
-                _logger.error(f"Error processing pos_category ID {pos_categ_id}: {e}")
-                continue
+        except Exception as e:
+            _logger.error(f"Error processing pos_category IDs: {e}")
 
         return None
     def get_s3_signed_url(self, image, id_menu):

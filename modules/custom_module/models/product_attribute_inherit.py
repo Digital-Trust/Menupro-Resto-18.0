@@ -80,10 +80,15 @@ class ProductAttribute(models.Model):
             data = rec._call_mp("POST", base, rec._build_payload())
             rec.menuproId = data.get("_id")
 
-            # map des valeurs
             vmap = {v["odoo_id"]: v["_id"] for v in data.get("values", [])}
+            values_to_update = []
             for val in rec.value_ids:
-                val.menuproId = vmap.get(val.id)
+                menupro_id = vmap.get(val.id)
+                if menupro_id:
+                    values_to_update.append((val, menupro_id))
+            
+            for val, menupro_id in values_to_update:
+                val.menuproId = menupro_id
         return records
 
     def write(self, vals):
@@ -100,13 +105,19 @@ class ProductAttribute(models.Model):
             else:
                 response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
 
-            # On map les valeurs si la réponse contient des values
+            # On map les valeurs si la réponse contient des values - Optimized batch write
             if response and "values" in response:
                 vmap = {v["odoo_id"]: v["_id"] for v in response["values"]}
+                # Prepare batch updates
+                values_to_update = []
                 for val in rec.value_ids:
                     if not val.menuproId and val.id in vmap:
-                        val.menuproId = vmap[val.id]
-                        _logger.info("🆕 Attribution du MenuPro ID à val.id=%s → %s", val.id, vmap[val.id])
+                        values_to_update.append((val, vmap[val.id]))
+                
+                # Execute batch write
+                for val, menupro_id in values_to_update:
+                    val.menuproId = menupro_id
+                    _logger.info("🆕 Attribution du MenuPro ID à val.id=%s → %s", val.id, menupro_id)
         return res
 
     @api.ondelete(at_uninstall=False)
