@@ -3,6 +3,9 @@ from odoo.exceptions import UserError
 from odoo.http import request
 import requests
 from odoo import http
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 def prepare_data_and_create_floor_mp(name, odoo_id):
@@ -38,7 +41,7 @@ def rename_floor_mp(menupro_id, new_name):
         }
         requests.patch('https://api.menupro.tn/restaurant-floors/' + menupro_id, json=data, headers={'x-odoo-key': odoo_secret_key})
     except Exception as e:
-        print(f"Error renaming floor: {e}")
+        _logger.error("Error renaming floor %s: %s", menupro_id, e, exc_info=True)
 
 
 def deactivate_floor_mp(menupro_id,floor_record):
@@ -53,15 +56,16 @@ def deactivate_floor_mp(menupro_id,floor_record):
         else:
             raise UserError(_("Failed to deactivate floor: %s") % response.text)
     except Exception as e:
-        print(f"Error deactivating floor: {e}")
+        _logger.error("Error deactivating floor %s: %s", menupro_id, e, exc_info=True)
 
 
 def delete_floor_mp(menupro_id):
     try:
         odoo_secret_key = tools.config.get("odoo_secret_key")
         requests.delete('https://api.menupro.tn/restaurant-floors/permanently-delete/' + menupro_id, headers={'x-odoo-key': odoo_secret_key})
+        _logger.info("Floor %s permanently deleted from MenuPro", menupro_id)
     except Exception as e:
-        print(f"Error deactivating floor: {e}")
+        _logger.error("Error deleting floor %s: %s", menupro_id, e, exc_info=True)
 
 
 def check_and_create_table_mp(name, odoo_id, seats, identifier, floor):
@@ -74,7 +78,7 @@ def check_and_create_table_mp(name, odoo_id, seats, identifier, floor):
 
     # Check if menupro_id is False or not set, then create the floor in MenuPro
     if not floor.menupro_id:
-        print('Creating floor in MenuPro...')
+        _logger.info("Creating floor '%s' in MenuPro", floor.name)
         menupro_id = prepare_data_and_create_floor_mp(floor.name, floor.id)
         floor.sudo().write({'menupro_id': menupro_id})
     else:
@@ -89,7 +93,7 @@ def check_and_create_table_mp(name, odoo_id, seats, identifier, floor):
     }
 
     response = requests.post('https://api.menupro.tn/restaurant-tables/' + restaurant_id, json=data, headers={'x-odoo-key': odoo_secret_key})
-    # print("response content => ", response.content)
+    
     if response.status_code == 201:
         try:
             menupro_id = response.json().get('_id')
@@ -110,39 +114,40 @@ def update_table_mp(menupro_id, name, seats):
             "seats": seats
         }
         response = requests.patch('https://api.menupro.tn/restaurant-tables/' + menupro_id, json=data, headers={'x-odoo-key': odoo_secret_key})
-        # print("content", response.content)
+        _logger.debug("Table %s updated in MenuPro", menupro_id)
     except Exception as e:
-        print(f"Error renaming floor: {e}")
+        _logger.error("Error updating table %s: %s", menupro_id, e, exc_info=True)
 
 
 def deactivate_table_mp(menupro_id):
     try:
         odoo_secret_key = tools.config.get("odoo_secret_key")
         requests.delete('https://api.menupro.tn/restaurant-tables/' + menupro_id,  headers={'x-odoo-key': odoo_secret_key})
+        _logger.info("Table %s deactivated in MenuPro", menupro_id)
     except Exception as e:
-        print(f"Error deactivating floor: {e}")
+        _logger.error("Error deactivating table %s: %s", menupro_id, e, exc_info=True)
 
 
 def delete_table_mp(menupro_id):
     try:
-        print("deleting table from MP...")
+        _logger.info("Deleting table %s from MenuPro", menupro_id)
         odoo_secret_key = tools.config.get("odoo_secret_key")
         response = requests.delete('https://api.menupro.tn/restaurant-tables/permanently-delete/' + menupro_id,  headers={'x-odoo-key': odoo_secret_key})
-        print("content", response.content)
+        _logger.debug("Table deletion response: %s", response.status_code)
     except Exception as e:
-        print(f"Error deactivating floor: {e}")
+        _logger.error("Error deleting table %s: %s", menupro_id, e, exc_info=True)
 
 
 def associate_tags_table_mp(menupro_id, tag_ids):
     try:
-        print("associating tags to table in MP...")
+        _logger.info("Associating tags to table %s in MenuPro", menupro_id)
         tags_to_add = []
         tags_to_remove = []
 
         for tag_id in tag_ids:
             # if tag_id[0] == 4 : tag added
             # if tag_id[0] == 3 : tag deleted
-            print("tag_id", tag_id)
+            _logger.debug("Processing tag_id: %s", tag_id)
             tag_record = http.request.env['table.tags'].sudo().search([('id', '=', tag_id[1])])
             if tag_id[0] == 3:
                 tags_to_remove.append(tag_record.menupro_id)
@@ -160,14 +165,14 @@ def associate_tags_table_mp(menupro_id, tag_ids):
         odoo_secret_key = tools.config.get("odoo_secret_key")
         if data_to_add != {'tagIds': []}:
             response_to_add = requests.patch(f'https://api.menupro.tn/restaurant-tables/add-tags/push/{menupro_id}', json=data_to_add,  headers={'x-odoo-key': odoo_secret_key})
-            print("content of adding", response_to_add.content)
+            _logger.debug("Tags added to table %s, response: %s", menupro_id, response_to_add.status_code)
 
         if data_to_remove != {'tagIds': []}:
             response_to_remove = requests.patch(f'https://api.menupro.tn/restaurant-tables/remove-tags/{menupro_id}', json=data_to_remove,  headers={'x-odoo-key': odoo_secret_key})
-            print("content of removing", response_to_remove.content)
+            _logger.debug("Tags removed from table %s, response: %s", menupro_id, response_to_remove.status_code)
 
     except Exception as e:
-        print(f"Error associating tags: {e}")
+        _logger.error("Error associating tags to table %s: %s", menupro_id, e, exc_info=True)
 
 
 class RestaurantFloor(models.Model):
@@ -182,7 +187,7 @@ class RestaurantFloor(models.Model):
         # Get the newly created record using its ID
         floor_record = self.browse(result['id'])
         if not floor_record.menupro_id:
-            print('Creating floor in MenuPro...')
+            _logger.info("Creating floor '%s' in MenuPro from UI", name)
             # Synchronize with MP and get the menupro_id
             menupro_id = prepare_data_and_create_floor_mp(name, result['id'])
             floor_record.write({'menupro_id': menupro_id})
@@ -208,14 +213,14 @@ class RestaurantFloor(models.Model):
                 records = super(RestaurantFloor, self).create(vals)
                 for record in records:
                     if not record.menupro_id:
-                        print('Creating floor in MenuPro...')
+                        _logger.info("Creating floor '%s' in MenuPro", record.name)
                         menupro_id = prepare_data_and_create_floor_mp(record.name, record.id)
                         record.write({'menupro_id': menupro_id})
                 return records
             else:
                 new_record = super(RestaurantFloor, self).create(vals_list)
                 if not new_record.menupro_id:
-                    print('Creating floor in MenuPro...')
+                    _logger.info("Creating floor '%s' in MenuPro", new_record.name)
                     menupro_id = prepare_data_and_create_floor_mp(new_record.name, new_record.id)
                     new_record.write({'menupro_id': menupro_id})
                 return new_record
@@ -256,7 +261,7 @@ class RestaurantTable(models.Model):
         return records
 
     def write(self, vals):
-        print("vals", vals)
+        _logger.debug("Updating restaurant table with vals: %s", vals)
         res = super(RestaurantTable, self).write(vals)
 
         for table in self:

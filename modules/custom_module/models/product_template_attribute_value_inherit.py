@@ -1,5 +1,6 @@
 from odoo import models, fields, api
 import logging
+from ..utils.security_utils import mask_sensitive_data
 
 _logger = logging.getLogger(__name__)
 
@@ -37,9 +38,9 @@ class ProductTemplateAttributeValue(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        print("ProductTemplateAttributeValue vals_list =>", vals_list)
+        _logger.debug("Creating ProductTemplateAttributeValue with vals: %s", vals_list)
         records = super().create(vals_list)
-        print("ProductTemplateAttributeValue records =>", records)
+        _logger.debug("Created ProductTemplateAttributeValue records: %s", records)
 
         cfg = self._get_config()
         base = f"{cfg['attributs_url']}/template-values"
@@ -49,10 +50,12 @@ class ProductTemplateAttributeValue(models.Model):
 
 
                 payload = rec._build_payload()
-                print("PTAV Payload envoyé:", payload)
-
+                masked_payload = mask_sensitive_data(payload)
+                _logger.debug("PTAV Payload to send: %s", masked_payload)
+                
                 data = rec._call_mp("POST", base, payload)
-                print("PTAV Réponse reçue:", data)
+                masked_response = mask_sensitive_data(data)
+                _logger.debug("PTAV Response received: %s", masked_response)
 
                 if data and data.get("_id"):
                     rec.menuproId = data.get("_id")

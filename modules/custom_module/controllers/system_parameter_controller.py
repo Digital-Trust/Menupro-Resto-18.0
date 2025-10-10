@@ -43,18 +43,18 @@ class SystemParameterController(http.Controller):
             return {'error': 'Local IP not configured'}
 
         print_receipt_url = f"{local_ip}/print_receipt"
-        # print("url", print_receipt_url)
+        _logger.debug("Print receipt URL: %s", print_receipt_url)
 
         data = json.loads(request.httprequest.data.decode('utf-8'))
-        # print("data passed", data)
+        _logger.debug("Print data received: %s", data)
 
         headers = {'Content-Type': 'application/json'}
 
         response = requests.post(print_receipt_url, headers=headers, json=data)
-        # print("response content", response.content)
+        _logger.debug("Print response status: %s", response.status_code)
 
         if response.status_code == 200:
-            print("Response from the controller", response)
+            _logger.info("Print receipt successful, response: %s", response.status_code)
             return True
         else:
             return {'error': f"Failed to print: {response.status_code} - {response.text}"}
@@ -72,10 +72,10 @@ class SystemParameterController(http.Controller):
             print_receipt_url = f"http://{data['public_ip']}:{print_port}/print_receipt"
         headers = {'Content-Type': 'application/json'}
         response = requests.post(print_receipt_url, headers=headers, json=data)
-        print("response content", response.content)
+        _logger.debug("Print full order response status: %s", response.status_code)
 
         if response.status_code == 200:
-            print("Response from the controller", response)
+            _logger.info("Print full order successful, response: %s", response.status_code)
             return True
         else:
             return {'error': f"Failed to print: {response.status_code} - {response.text}"}

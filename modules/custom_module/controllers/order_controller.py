@@ -3,8 +3,11 @@ import logging
 from odoo import http, fields
 from odoo.http import request
 from odoo.addons.pos_self_order.controllers.orders import PosSelfOrderController
+from odoo.exceptions import ValidationError
 import uuid
 from datetime import date, datetime
+from ..utils.security_utils import mask_sensitive_data
+from ..utils.validators import InputValidator, DataSanitizer, PermissionChecker
 
 _logger = logging.getLogger(__name__)
 
@@ -85,7 +88,8 @@ class OrderController(PosSelfOrderController):
         _logger.info(f"📱 apply_default_mobile_promo - amount_total: {amount_total}, restaurant_id: {restaurant_id}")
         config_model = request.env['restaurant.discount.config'].sudo()
         discount_config = config_model.get_default_mobile_promo_config(restaurant_id)
-        _logger.info(f"Config trouvée: {discount_config}")
+        masked_config = mask_sensitive_data(discount_config)
+        _logger.info(f"Config trouvée: {masked_config}")
 
         if not discount_config['enabled']:
             _logger.warning(f"❌ Code promo par défaut désactivé (enabled=False)")
@@ -403,18 +407,6 @@ class OrderController(PosSelfOrderController):
         request.env['pos.order'].sudo().sync_from_ui([order_data_for_sync])
         return existing_order
 
-    def debug_order_fields(self, order):
-        """
-        Méthode pour déboguer les champs de la commande
-        """
-        _logger.info(f"=== DEBUG ORDER FIELDS ===")
-        _logger.info(f"Order ID: {order.id}")
-        _logger.info(f"mobile_user_id: {getattr(order, 'mobile_user_id', 'FIELD_NOT_EXISTS')}")
-        _logger.info(f"subscription_id: {getattr(order, 'subscription_id', 'FIELD_NOT_EXISTS')}")
-        _logger.info(f"table_id: {order.table_id.id}")
-        _logger.info(f"state: {order.state}")
-        _logger.info(f"=== END DEBUG ===")
-
     def create_new_order(self, pos_config, restaurant_table, line_operations, access_token, takeaway, menupro_id,
                          mobile_user_id=None, subscription_id=None, paid_online=None, menupro_name=None):
         """
@@ -535,17 +527,33 @@ class OrderController(PosSelfOrderController):
         """
         _logger.info('******************* process_mobile_order **************')
         try:
-            # Validation des données d'entrée
+            # Validation et sanitization des données d'entrée
             raw_data = request.httprequest.data
             data = json.loads(raw_data.decode('utf-8')) if raw_data else {}
+            
+            # Sanitize input data
+            data = DataSanitizer.sanitize_dict(data)
             order_data = data.get('order', {})
 
             if not order_data or 'lines' not in order_data:
                 return http.Response(json.dumps({"error": "Invalid order data"}),
                                      content_type='application/json', status=400)
 
-            # Extraction des paramètres
-            pos_config_id = data.get('pos_config_id')
+            # Validate required fields
+            try:
+                InputValidator.validate_required_fields(data, ['pos_config_id', 'access_token'])
+                InputValidator.validate_required_fields(order_data, ['lines'])
+            except ValidationError as e:
+                return http.Response(json.dumps({"error": str(e)}),
+                                     content_type='application/json', status=400)
+
+            # Extraction et validation des paramètres
+            try:
+                pos_config_id = InputValidator.validate_integer(data.get('pos_config_id'), 'pos_config_id', min_value=1)
+            except ValidationError as e:
+                return http.Response(json.dumps({"error": str(e)}),
+                                     content_type='application/json', status=400)
+            
             table_identifier = data.get('table_identifier')
             access_token = data.get('access_token')
             device_type = data.get('device_type', 'mobile')
@@ -564,9 +572,9 @@ class OrderController(PosSelfOrderController):
             _logger.info(f"device_type: {device_type}")
             _logger.info(f"origine: {order_data.get('origine')}")
             _logger.info(f"is_qr_mobile_order: {is_qr_mobile_order}")
-            _logger.info(f"discount_code: {discount_code}")
-            _logger.info(f"mobile_user_id reçu: {mobile_user_id}")
-            _logger.info(f"subscription_id reçu: {subscription_id}")
+            _logger.info(f"discount_code: {'***MASKED***' if discount_code else None}")
+            _logger.info(f"mobile_user_id reçu: {'***MASKED***' if mobile_user_id else None}")
+            _logger.info(f"subscription_id reçu: {'***MASKED***' if subscription_id else None}")
             _logger.info(f"menupro_id reçu: {menupro_id}")
             _logger.info(f"takeaway reçu: {takeaway}")
             _logger.info(f"paid_online reçu: {paid_online}")
@@ -737,9 +745,10 @@ class OrderController(PosSelfOrderController):
             # Debug de la réponse
             _logger.info(f"=== RESPONSE DATA DEBUG ===")
             if isinstance(response_data, dict):
-                _logger.info(f"Response keys: {list(response_data.keys())}")
-                _logger.info(f"takeaway in response: {response_data.get('takeaway', 'NOT_FOUND')}")
-                _logger.info(f"mobile_user_id in response: {response_data.get('mobile_user_id', 'NOT_FOUND')}")
+                masked_response = mask_sensitive_data(response_data)
+                _logger.info(f"Response keys: {list(masked_response.keys())}")
+                _logger.info(f"takeaway in response: {masked_response.get('takeaway', 'NOT_FOUND')}")
+                _logger.info(f"mobile_user_id in response: {'***MASKED***' if response_data.get('mobile_user_id') else 'NOT_FOUND'}")
             _logger.info(f"=== END RESPONSE DEBUG ===")
 
             # Retour de la réponse

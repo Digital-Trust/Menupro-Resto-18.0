@@ -115,13 +115,6 @@ patch(PosOrder.prototype, {
         }
     },
 
-    /* This function is called after the order has been successfully sent to the preparation tool(s). */
-    // @Override
-    updateLastOrderChange() {
-
-        const res = super.updateLastOrderChange();
-    },
-
      /**
      * A wrapper around line.delete() that may potentially remove multiple orderlines.
      * In core pos, it removes the linked combo lines. In other modules, it may remove
@@ -189,10 +182,8 @@ patch(PosOrder.prototype, {
 
                 lineToRemove.delete();
 
-                const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
-                const currentCashier = this.models["hr.employee"].get(cashier_id);
                 try {
-                     rpc("/web/dataset/call_kw/pos.order/write", {
+                    await rpc("/web/dataset/call_kw/pos.order/write", {
                         model: "pos.order",
                         method: "write",
                         args: [[this.id], {
@@ -211,5 +202,4 @@ patch(PosOrder.prototype, {
         }
         return true;
     }
-
 });

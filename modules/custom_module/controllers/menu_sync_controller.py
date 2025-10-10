@@ -26,7 +26,7 @@ class MenuSyncController(http.Controller):
             return {'status': 'success', 'message': 'Menus synchronized successfully'}
 
         except Exception as e:
-            print(f"Error while synchronizing menus: {str(e)}")
+            _logger.error("Error while synchronizing menus: %s", str(e), exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     @http.route('/sync_menus_by_range', type='json', auth='public', methods=['POST'])
@@ -48,7 +48,7 @@ class MenuSyncController(http.Controller):
             return {'status': 'success', 'message': 'Menus synchronized successfully'}
 
         except Exception as e:
-            print(f"Error while synchronizing menus: {str(e)}")
+            _logger.error("Error while synchronizing menus by range: %s", str(e), exc_info=True)
             return {'status': 'error', 'message': str(e)}
 
     # Helper methods
