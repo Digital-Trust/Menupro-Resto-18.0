@@ -183,15 +183,19 @@ patch(PosOrder.prototype, {
                 lineToRemove.delete();
 
                 try {
-                    await rpc("/web/dataset/call_kw/pos.order/write", {
-                        model: "pos.order",
-                        method: "write",
-                        args: [[this.id], {
-                            cashier: currentCashier.name,
-                            employee_id: currentCashier.id,
-                        }],
-                        kwargs: {},
-                    });
+                   if (typeof this.id === 'number') {
+                        await rpc("/web/dataset/call_kw/pos.order/write", {
+                            model: "pos.order",
+                            method: "write",
+                            args: [[this.id], {
+                                cashier: currentCashier.name,
+                                employee_id: currentCashier.id,
+                            }],
+                            kwargs: {},
+                        });
+                   } else {
+                        console.log("Order not yet saved to database, skipping cashier update");
+                   }
                 } catch (error) {
                     console.error("Erreur lors de la mise à jour du cashier:", error);
                 }
