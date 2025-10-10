@@ -60,10 +60,13 @@ class ProductTemplate(models.Model):
         return super(ProductTemplate, self).write(vals)
 
     def create(self, vals_list):
-        if isinstance(vals_list, list):
-            created_records = self.env['product.template']  # recordset vide
+        if self.env.context.get('from_menupro_sync'):
+            _logger.info(f"📥 Création depuis MenuPro (pas de sync retour)")
+            return super(ProductTemplate, self).create(vals_list)
 
-            # Create storable products only in Odoo (not in MenuPro)
+        if isinstance(vals_list, list):
+            created_records = self.env['product.template']
+
             consu_products = [val for val in vals_list if val.get('is_storable') is True]
             non_consu_products = [val for val in vals_list if val.get('is_storable') is False]
 
@@ -72,28 +75,24 @@ class ProductTemplate(models.Model):
 
             if non_consu_products:
                 for product_vals in non_consu_products:
-                    # Check if product has pos_category with menupro_id before creating in MenuPro
                     if self._should_create_in_menupro_for_create(product_vals):
-                        self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                        self._process_single_product(product_vals)
                     else:
-                        _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", product_vals.get('name', 'Unknown'))
-                # Always create in Odoo regardless of MenuPro status
+                        _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id",
+                                     product_vals.get('name', 'Unknown'))
                 created_records += super(ProductTemplate, self).create(non_consu_products)
 
             return created_records
 
         if vals_list.get('is_storable') is True:
-            # Create only in Odoo
             return super(ProductTemplate, self).create(vals_list)
 
-        # Check if product has pos_category with menupro_id before creating in MenuPro
         if self._should_create_in_menupro_for_create(vals_list):
-            # Create in both MenuPro and Odoo
             self._process_single_product(vals_list)
         else:
-            _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", vals_list.get('name', 'Unknown'))
-        
-        # Always create in Odoo regardless of MenuPro status
+            _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id",
+                         vals_list.get('name', 'Unknown'))
+
         return super(ProductTemplate, self).create(vals_list)
 
     def _should_create_in_menupro_for_create(self, vals):
@@ -138,25 +137,24 @@ class ProductTemplate(models.Model):
         return {"status_code": status_code, "response_data": response_data}
 
     def write(self, vals):
+        if self.env.context.get('from_menupro_sync'):
+            _logger.info(f"📥 Mise à jour depuis MenuPro (pas de sync retour) pour {len(self)} produits")
+            return super(ProductTemplate, self).write(vals)
+
         res = super(ProductTemplate, self).write(vals)
+
         for product in self:
             _logger.debug("Updating product: %s", product.name)
 
             if product.is_storable is True:
                 continue
-            # Check if product needs to be created in MenuPro during update
+
             if not product.menupro_id and self._should_create_in_menupro_for_update(product):
                 self._create_product_in_menupro(product)
             else:
-                # Normal update flow
                 self._create_or_update_menupro_menu(product)
 
-        # If image_1920 is updated, upload the new image to S3 and update MenuPro
-        # if 'image_1920' in vals and vals["image_1920"]:
-        # for product in self:
-        # if product.menupro_id:
-        # self._upload_image_to_menupro(vals, product.menupro_id)
-        _logger.info(f'\033[92mSuccessfully updated the menu with vals {vals} in MenuPro and Odoo Servers\033[0m')  # Green
+        _logger.info(f'✅ Successfully updated the menu with vals {vals} in MenuPro and Odoo Servers')
         return res
 
     def _should_create_in_menupro_for_update(self, product):

@@ -18,12 +18,43 @@ class MenuSyncController(http.Controller):
         """
         try:
             config_params = self._validate_config()
-            _logger.info('\033[94m======================== GETTING RESTAURANT MENUS ========================\033[0m')  # Blue
-            menus = self._fetch_menus(config_params['restaurant_id'], config_params['synchronize_menus_url'], config_params['odoo_secret_key'])
-            self._process_menus(menus, config_params['base_s3_url'])
+            _logger.info('\033[94m======================== GETTING RESTAURANT MENUS ========================\033[0m')
 
-            _logger.info('\033[94m======================== FINISH GETTING RESTAURANT MENUS ========================\033[0m')  # Blue
-            return {'status': 'success', 'message': 'Menus synchronized successfully'}
+            # ✅ Récupérer les menus
+            menus = self._fetch_menus(
+                config_params['restaurant_id'],
+                config_params['synchronize_menus_url'],
+                config_params['odoo_secret_key']
+            )
+
+
+            if isinstance(menus, str):
+                _logger.error(f"❌ Erreur: menus est une string au lieu d'un dict: {menus}")
+                return {'status': 'error', 'message': 'Failed to fetch menus'}
+
+            if not isinstance(menus, dict):
+                _logger.error(f"❌ Erreur: menus n'est pas un dict: {type(menus)}")
+                return {'status': 'error', 'message': 'Invalid menus format'}
+
+            created_count = len(menus.get('created', []))
+            updated_count = len(menus.get('updated', []))
+            deleted_count = len(menus.get('deleted', []))
+
+
+
+            # ✅ Vérifier si des menus existent
+            if created_count == 0 and updated_count == 0 and deleted_count == 0:
+                _logger.warning("⚠️ Aucun menu à synchroniser (created=0, updated=0, deleted=0)")
+            else:
+                # ✅ Traiter les menus avec le contexte
+                self._process_menus(menus, config_params['base_s3_url'])
+
+            _logger.info(
+                '\033[94m======================== FINISH GETTING RESTAURANT MENUS ========================\033[0m')
+            return {
+                'status': 'success',
+                'message': f'Menus synchronized - Created: {created_count}, Updated: {updated_count}, Deleted: {deleted_count}'
+            }
 
         except Exception as e:
             _logger.error("Error while synchronizing menus: %s", str(e), exc_info=True)
@@ -66,25 +97,53 @@ class MenuSyncController(http.Controller):
 
         for key, value in config_params.items():
             if not value:
-                _logger.error(f"{key} is not valid in Config")
+                _logger.error(f"❌ {key} is not valid in Config")
                 raise UserError(f"There is no {key} in Config")
-        _logger.info('\033[92mConfiguration keys are validated\033[0m')  # Green
+
+        _logger.info('✅ Configuration keys are validated')
         return config_params
 
     @staticmethod
     def _fetch_menus(restaurant_id, synchronize_menus_url, odoo_secret_key):
         """Fetch menus from the external API."""
-        response = requests.get(f"{synchronize_menus_url}{restaurant_id}", headers={'x-odoo-key': odoo_secret_key})
-        if response.status_code != 200:
-            error_msg = {'error': 'Failed to fetch menus from the external API'}
-            result = dict(
-                success=False,
-                message=http.Response(json.dumps(error_msg), content_type='application/json'),
-            )
-            _logger.error('Error while fetching menus from Menupro Server: ', json.dumps(result))
-            return json.dumps(result)
+        try:
+            _logger.info(f"🔍 Fetching menus from: {synchronize_menus_url}{restaurant_id}")
 
-        return response.json()
+            response = requests.get(
+                f"{synchronize_menus_url}{restaurant_id}",
+                headers={'x-odoo-key': odoo_secret_key},
+                timeout=30
+            )
+
+            _logger.info(f"📡 Response status: {response.status_code}")
+
+            if response.status_code != 200:
+                error_msg = f'Failed to fetch menus. Status: {response.status_code}, Response: {response.text}'
+                _logger.error(f'❌ {error_msg}')
+                # ✅ RETOURNER UN DICT, PAS UNE STRING
+                return {'created': [], 'updated': [], 'deleted': [], 'error': error_msg}
+
+            menus = response.json()
+            _logger.info(f"📦 Response JSON: {response.text}")
+
+            _logger.info(f"✅ Menus récupérés avec succès: {type(menus)}")
+
+            # ✅ Vérifier la structure
+            if not isinstance(menus, dict):
+                _logger.error(f"❌ Format invalide: attendu dict, reçu {type(menus)}")
+                return {'created': [], 'updated': [], 'deleted': []}
+
+            return menus
+
+        except requests.exceptions.Timeout:
+            _logger.error("❌ Timeout lors de la récupération des menus")
+            return {'created': [], 'updated': [], 'deleted': []}
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"❌ Erreur réseau: {e}")
+            return {'created': [], 'updated': [], 'deleted': []}
+        except Exception as e:
+            _logger.error(f"❌ Erreur inattendue: {e}", exc_info=True)
+            return {'created': [], 'updated': [], 'deleted': []}
 
     @staticmethod
     def _fetch_menus_by_range(restaurant_id, synchronize_menus_url, odoo_secret_key):
@@ -106,23 +165,44 @@ class MenuSyncController(http.Controller):
 
     def _process_menus(self, menus, s3_base_url):
         """Process the fetched menus."""
-        pos_menus_model = http.request.env['product.template'].sudo()
+        _logger.info("🔄 Début du traitement des menus")
+
+        # ✅ Ajouter le contexte pour éviter la boucle
+        pos_menus_model = http.request.env['product.template'].sudo().with_context(
+            from_menupro_sync=True
+        )
         product_category_model = http.request.env['product.category'].sudo()
         pos_category_model = http.request.env['pos.category'].sudo()
         account_tax = http.request.env['account.tax'].sudo().search([('amount', '=', 0.000)])
 
-        created_menus = menus['created']
-        updated_menus = menus['updated']
-        deleted_menus = menus['deleted']
+        created_menus = menus.get('created', [])
+        updated_menus = menus.get('updated', [])
+        deleted_menus = menus.get('deleted', [])
 
-        for menu_data in created_menus:
-            self._create_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url)
+        for i, menu_data in enumerate(created_menus, 1):
+            try:
+                _logger.info(f"  ➕ Création menu {i}/{len(created_menus)}: {menu_data.get('title', 'N/A')}")
+                self._create_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax,
+                                  s3_base_url)
+            except Exception as e:
+                _logger.error(f"  ❌ Erreur création menu {i}: {e}", exc_info=True)
 
-        # for menu_data in updated_menus:
-        #    self._update_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url)
+        for i, menu_data in enumerate(updated_menus, 1):
+            try:
+                _logger.info(f"  🔄 MAJ menu {i}/{len(updated_menus)}: {menu_data.get('title', 'N/A')}")
+                self._update_menu(menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax,
+                                  s3_base_url)
+            except Exception as e:
+                _logger.error(f"  ❌ Erreur MAJ menu {i}: {e}", exc_info=True)
 
-        for menu_id in deleted_menus:
-            self._deactivate_menu(menu_id, pos_menus_model)
+        for i, menu_id in enumerate(deleted_menus, 1):
+            try:
+                _logger.info(f"  ➖ Suppression menu {i}/{len(deleted_menus)}: {menu_id}")
+                self._deactivate_menu(menu_id, pos_menus_model)
+            except Exception as e:
+                _logger.error(f"  ❌ Erreur suppression menu {i}: {e}", exc_info=True)
+
+        _logger.info("✅ Fin du traitement des menus")
 
     def _create_menu(self, menu_data, pos_menus_model, product_category_model, pos_category_model, account_tax, s3_base_url):
         """Create a new menu."""
