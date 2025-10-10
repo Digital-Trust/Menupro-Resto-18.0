@@ -54,7 +54,7 @@ class PosPaymentMethod(models.Model):
                 'journal_id': journal_id,
                 'receivable_account_id': receivable_account_id,
                 'menupro_online_payment': True,
-                'pos_config_ids': [(4, pos_config_id)], # Link to the POS config
+                'pos_config_ids': [(4, pos_config_id)],
             })
             _logger.info(f"Payment method 'Online Menupro' created successfully with ID: {new_method.id}")
             return new_method.id

@@ -70,7 +70,6 @@ patch(PosStore.prototype, {
 
   getReceiptHeaderData(order) {
     const result = super.getReceiptHeaderData(...arguments);
-    console.log("result", result);
     result.ticket_number = order.ticket_number;
     result.floating_order_name = order.floating_order_name || "";
     return result;
@@ -103,7 +102,6 @@ patch(PosStore.prototype, {
     } else {
       merge = true;
     }
-    console.log("merge =", merge);
     order.assert_editable();
     const options = {
       ...opts,
@@ -439,7 +437,6 @@ patch(PosStore.prototype, {
       ...comboCancelledChanges,
       ...normalCancelledChanges,
     ];
-    console.log("orderChange.cancelled", orderChange.cancelled);
 
     for (const printer of this.unwatched.printers) {
       const changes = this._getPrintingCategoriesChanges(
