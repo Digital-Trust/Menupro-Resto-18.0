@@ -21,17 +21,23 @@ class ProductAttribute(models.Model):
             'odoo_secret_key',
             'restaurant_id'
         ]
-        
+
         cfg = ConfigCache.get_config(self.env, config_keys)
-        
+
         masked_cfg = mask_sensitive_data(cfg)
         _logger.debug("\033[92mMenuPro config loaded: %s\033[0m", masked_cfg)
         return cfg
 
-    def _build_payload(self):
+    def _build_payload(self, include_values=True):
+        """Build payload for MenuPro API.
+
+        Args:
+            include_values: If False, don't include values (useful during creation)
+        """
         cfg = self._get_config()
         self.ensure_one()
-        return {
+
+        payload = {
             "odoo_id": self.id,
             "menuProName": self.name,
             "create_variant": self.create_variant,
@@ -40,8 +46,17 @@ class ProductAttribute(models.Model):
             "status": "active" if self.active else "archived",
             "active": self.active,
             "restaurant_id": cfg['restaurant_id'],
-            "values": [
-                {
+        }
+
+        if include_values:
+            values_list = []
+            for v in self.value_ids:
+                # Skip values without real IDs (being created in same transaction)
+                if not v.id or isinstance(v.id, models.NewId):
+                    _logger.debug("Skipping value without real ID: %s", v.name)
+                    continue
+
+                values_list.append({
                     "odoo_id": v.id,
                     "menuProName": v.name,
                     "sequence": v.sequence,
@@ -51,10 +66,9 @@ class ProductAttribute(models.Model):
                     "active": v.active,
                     "default_extra_price": v.default_extra_price,
                     "restaurant_id": cfg['restaurant_id'],
-                }
-                for v in self.value_ids            ],
-
-        }
+                })
+            payload["values"] = values_list
+        return payload
 
     def _call_mp(self, method, url, json=None):
         cfg = self._get_config()
@@ -63,9 +77,13 @@ class ProductAttribute(models.Model):
             "x-odoo-secret-key": cfg['odoo_secret_key'],
         }
         try:
+            _logger.info("MenuPro API call: %s %s with payload: %s", method, url, json)
             resp = requests.request(method, url, json=json, headers=headers, timeout=10)
             resp.raise_for_status()
             return resp.json() if resp.text else {}
+        except requests.exceptions.HTTPError as e:
+            _logger.error("MenuPro API error: %s - Response: %s", e, e.response.text if e.response else 'No response')
+            raise
         except Exception as e:
             _logger.warning("MenuPro %s %s failed → %s", method, url, e)
             raise
@@ -77,18 +95,31 @@ class ProductAttribute(models.Model):
         base = cfg['attributs_url']
 
         for rec in records:
-            data = rec._call_mp("POST", base, rec._build_payload())
+            # First create attribute without values (values might not have IDs yet)
+            payload = rec._build_payload(include_values=False)
+            payload["values"] = []  # Empty values array for initial creation
+
+            data = rec._call_mp("POST", base, payload)
             rec.menuproId = data.get("_id")
 
-            vmap = {v["odoo_id"]: v["_id"] for v in data.get("values", [])}
-            values_to_update = []
-            for val in rec.value_ids:
-                menupro_id = vmap.get(val.id)
-                if menupro_id:
-                    values_to_update.append((val, menupro_id))
-            
-            for val, menupro_id in values_to_update:
-                val.menuproId = menupro_id
+            # Now update with values if they exist and have IDs
+            if rec.value_ids:
+                # Force flush to ensure value IDs are assigned
+                self.env.flush_all()
+
+                # Update with values
+                update_payload = rec._build_payload(include_values=True)
+                if update_payload.get("values"):
+                    response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", update_payload)
+
+                    # Map MenuPro IDs back to values
+                    vmap = {v["odoo_id"]: v["_id"] for v in response.get("values", [])}
+                    for val in rec.value_ids:
+                        menupro_id = vmap.get(val.id)
+                        if menupro_id:
+                            val.menuproId = menupro_id
+                            _logger.info("🆕 Attribution du MenuPro ID à val.id=%s → %s", val.id, menupro_id)
+
         return records
 
     def write(self, vals):
@@ -97,7 +128,10 @@ class ProductAttribute(models.Model):
         base = cfg['attributs_url']
 
         for rec in self:
-            payload = rec._build_payload()
+            # Ensure all records are flushed
+            self.env.flush_all()
+
+            payload = rec._build_payload(include_values=True)
 
             if not rec.menuproId:
                 response = rec._call_mp("POST", base, payload)
@@ -105,16 +139,14 @@ class ProductAttribute(models.Model):
             else:
                 response = rec._call_mp("PATCH", f"{base}/{rec.menuproId}", payload)
 
-            # On map les valeurs si la réponse contient des values - Optimized batch write
+            # Map MenuPro IDs back to values
             if response and "values" in response:
                 vmap = {v["odoo_id"]: v["_id"] for v in response["values"]}
-                # Prepare batch updates
                 values_to_update = []
                 for val in rec.value_ids:
                     if not val.menuproId and val.id in vmap:
                         values_to_update.append((val, vmap[val.id]))
-                
-                # Execute batch write
+
                 for val, menupro_id in values_to_update:
                     val.menuproId = menupro_id
                     _logger.info("🆕 Attribution du MenuPro ID à val.id=%s → %s", val.id, menupro_id)
