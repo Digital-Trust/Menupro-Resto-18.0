@@ -1,6 +1,9 @@
 from odoo import models, fields, api, tools
 import requests
+import logging
 from ..utils import image_utils
+
+_logger = logging.getLogger(__name__)
 
 
 class PosCategory(models.Model):
@@ -38,13 +41,15 @@ class PosCategory(models.Model):
         try:
             get_category_by_id = tools.config.get('get_category_by_id_url')
             if get_category_by_id is None:
-                return "There is no get_category_by_id_url in Config"
+                _logger.error("There is no get_category_by_id_url in Config")
+                return None
 
             response = requests.get(get_category_by_id + str(category_id))
             response.raise_for_status()
             return response.json()
 
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Error fetching category data: {e}")
             return None
 
     def create_pos_category(self, vals_list):
@@ -75,7 +80,16 @@ class PosCategory(models.Model):
                         'image_128': img128,
                         'type_name': data.get('typeName', ''),
                     })
-        return super().create(vals_list)
+        
+        # Create POS categories first
+        pos_categories = super().create(vals_list)
+        
+        # Create corresponding product categories (avoid infinite loop)
+        for pos_category in pos_categories:
+            if not self.env.context.get('skip_product_sync'):
+                self._create_corresponding_product_category(pos_category)
+        
+        return pos_categories
 
     def write(self, vals):
         option = vals.get('option_name')
@@ -95,4 +109,60 @@ class PosCategory(models.Model):
                     'image_128': img128,
                     'type_name': data.get('typeName', ''),
                 })
-        return super().write(vals)
+        
+        result = super().write(vals)
+        
+        # Update corresponding product category if name or menupro_id changed
+        if not self.env.context.get('skip_product_sync') and ('name' in vals or 'menupro_id' in vals):
+            for pos_category in self:
+                self._update_corresponding_product_category(pos_category, vals)
+        
+        return result
+
+    def _create_corresponding_product_category(self, pos_category):
+        """ Create a corresponding product category with same name and menupro_id """
+        # Check if product category already exists with same menupro_id
+        existing_product_category = self.env['product.category'].search([
+            ('menupro_id', '=', pos_category.menupro_id)
+        ], limit=1)
+        
+        # Check if product category already exists with same name
+        existing_product_category_by_name = self.env['product.category'].search([
+            ('name', '=', pos_category.name)
+        ], limit=1)
+        
+        if not existing_product_category and not existing_product_category_by_name and pos_category.menupro_id:
+            # Create new product category with context to avoid infinite loop
+            product_category_vals = {
+                'name': pos_category.name,
+                'menupro_id': pos_category.menupro_id,
+                'picture': pos_category.picture,
+                'type_name': pos_category.type_name,
+            }
+            self.env['product.category'].with_context(skip_pos_sync=True).create(product_category_vals)
+            _logger.info("Created product category '%s' for POS category '%s'", pos_category.name, pos_category.name)
+        elif existing_product_category_by_name:
+            _logger.debug("Product category with name '%s' already exists - skipping creation", pos_category.name)
+        elif existing_product_category:
+            _logger.debug("Product category with menupro_id '%s' already exists - skipping creation", pos_category.menupro_id)
+
+    def _update_corresponding_product_category(self, pos_category, vals):
+        """ Update corresponding product category with same menupro_id """
+        if pos_category.menupro_id:
+            product_category = self.env['product.category'].search([
+                ('menupro_id', '=', pos_category.menupro_id)
+            ], limit=1)
+            
+            if product_category:
+                update_vals = {}
+                if 'name' in vals:
+                    update_vals['name'] = pos_category.name
+                if 'menupro_id' in vals:
+                    update_vals['menupro_id'] = pos_category.menupro_id
+                if 'picture' in vals:
+                    update_vals['picture'] = pos_category.picture
+                if 'type_name' in vals:
+                    update_vals['type_name'] = pos_category.type_name
+                
+                if update_vals:
+                    product_category.with_context(skip_pos_sync=True).write(update_vals)

@@ -25,7 +25,7 @@ class TableTags(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        print('create Tag batch')
+        _logger.info("Creating table tags batch: %s tags", len(vals_list) if isinstance(vals_list, list) else 1)
         new_records = []
         for vals in vals_list:
             name = vals.get('name')
@@ -56,7 +56,7 @@ class TableTags(models.Model):
         }
 
         response = requests.post('https://api.menupro.tn/tags', json=data)
-        print("response create", response.content)
+        _logger.debug("Tag creation response: %s", response.status_code)
         if response.status_code == 201:
             try:
                 menupro_id = response.json().get('_id')

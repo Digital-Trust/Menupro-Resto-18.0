@@ -38,9 +38,9 @@ class ProductTemplateAttributeLine(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        print("product template lines vals =>", vals_list)
+        _logger.debug("Creating product template lines with vals: %s", vals_list)
         records = super().create(vals_list)
-        print("records line ==>", records)
+        _logger.debug("Created product template lines: %s", records)
         cfg = self._get_config()
         base = f"{cfg['attributs_url']}/product-template-lines"
 

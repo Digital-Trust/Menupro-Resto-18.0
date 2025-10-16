@@ -12,12 +12,16 @@
                     </div>
                     <group>
                         <field name="restaurant_id" readonly="1"/>
+                        <field name="is_mobile_default" string="Code Promo Mobile par Défaut" help="Marquer ce code promo comme étant le code par défaut pour les commandes mobile self-order"/>
                         <field name="discount_code" required="1"/>
                         <field name="enabled"/>
                         <field name="discount_percentage"/>
                         <field name="min_amount"/>
-                            <field name="max_discount" help="Laisser vide pour pas de plafond"/>
-
+                        <field name="max_discount" help="Laisser vide pour pas de plafond"/>
+                    </group>
+                    <group string="Dates de validité">
+                        <field name="start_date" help="Date de début de validité du code promo (optionnel)"/>
+                        <field name="expiration_date" help="Date d'expiration du code promo (optionnel)"/>
                     </group>
                 </sheet>
             </form>
@@ -32,10 +36,13 @@
                 <field name="restaurant_id"/>
                 <field name="discount_code"/>
                 <field name="discount_name"/>
+                <field name="is_mobile_default" string="Mobile par Défaut" widget="boolean_toggle"/>
                 <field name="enabled" widget="boolean_toggle"/>
                 <field name="discount_percentage" string="Remise (%)"/>
                 <field name="min_amount" string="Montant min"/>
                 <field name="max_discount" string="Plafond"/>
+                <field name="start_date" string="Date début"/>
+                <field name="expiration_date" string="Date fin"/>
             </list>
 
         </field>
@@ -48,8 +55,15 @@
             <search string="Recherche Configuration Remise">
                 <field name="discount_name"/>
                 <field name="restaurant_id"/>
+                <field name="start_date"/>
+                <field name="expiration_date"/>
                 <filter name="enabled" string="Activées" domain="[('enabled', '=', True)]"/>
                 <filter name="disabled" string="Désactivées" domain="[('enabled', '=', False)]"/>
+                <filter name="mobile_default" string="Mobile par défaut" domain="[('is_mobile_default', '=', True)]"/>
+                <filter name="regular_promos" string="Codes promo normaux" domain="[('is_mobile_default', '=', False)]"/>
+                <filter name="active_promos" string="Promos actives" domain="[('enabled', '=', True), ('start_date', '&lt;=', context_today()), ('expiration_date', '&gt;=', context_today())]"/>
+                <filter name="expired_promos" string="Promos expirées" domain="[('expiration_date', '&lt;', context_today())]"/>
+                <filter name="future_promos" string="Promos futures" domain="[('start_date', '&gt;', context_today())]"/>
             </search>
         </field>
     </record>
@@ -72,7 +86,7 @@
 
     <menuitem id="menu_restaurant_discount_root"
               name="Remises QR Mobile"
-              parent="point_of_sale.menu_point_root"
+              parent="point_of_sale.menu_point_of_sale"
               sequence="50"/>
 
     <menuitem id="menu_restaurant_discount_config"
@@ -80,4 +94,5 @@
               action="action_restaurant_discount_config"
               parent="menu_restaurant_discount_root"
               sequence="10"/>
+
 </odoo>

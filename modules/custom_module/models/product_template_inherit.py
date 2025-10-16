@@ -59,31 +59,60 @@ class ProductTemplate(models.Model):
         """ This is a dedicated method to UPDATE product (A.K.A. menu) ONLY in Odoo and not in MenuPro Server"""
         return super(ProductTemplate, self).write(vals)
 
-    def create(self, vals):
-        if isinstance(vals, list):
+    def create(self, vals_list):
+        if isinstance(vals_list, list):
             created_records = self.env['product.template']  # recordset vide
 
             # Create storable products only in Odoo (not in MenuPro)
-            consu_products = [val for val in vals if val.get('is_storable') is True]
-            non_consu_products = [val for val in vals if val.get('is_storable') is False]
+            consu_products = [val for val in vals_list if val.get('is_storable') is True]
+            non_consu_products = [val for val in vals_list if val.get('is_storable') is False]
 
             if consu_products:
                 created_records += super(ProductTemplate, self).create(consu_products)
 
             if non_consu_products:
                 for product_vals in non_consu_products:
-                    self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                    # Check if product has pos_category with menupro_id before creating in MenuPro
+                    if self._should_create_in_menupro_for_create(product_vals):
+                        self._process_single_product(product_vals)   # create in MenuPro and Odoo
+                    else:
+                        _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", product_vals.get('name', 'Unknown'))
+                # Always create in Odoo regardless of MenuPro status
                 created_records += super(ProductTemplate, self).create(non_consu_products)
 
             return created_records
 
-        if vals.get('is_storable') is True:
+        if vals_list.get('is_storable') is True:
             # Create only in Odoo
-            return super(ProductTemplate, self).create(vals)
+            return super(ProductTemplate, self).create(vals_list)
 
-        # Otherwise, create in both MenuPro and Odoo
-        self._process_single_product(vals)
-        return super(ProductTemplate, self).create(vals)
+        # Check if product has pos_category with menupro_id before creating in MenuPro
+        if self._should_create_in_menupro_for_create(vals_list):
+            # Create in both MenuPro and Odoo
+            self._process_single_product(vals_list)
+        else:
+            _logger.info("Skipping MenuPro creation for product %s - no valid pos_category with menupro_id", vals_list.get('name', 'Unknown'))
+        
+        # Always create in Odoo regardless of MenuPro status
+        return super(ProductTemplate, self).create(vals_list)
+
+    def _should_create_in_menupro_for_create(self, vals):
+        """ Check if product should be created in MenuPro based on pos_category menupro_id """
+        # Get pos_category from vals
+        pos_categ_ids = vals.get('pos_categ_ids')
+        if not pos_categ_ids:
+            return False
+        
+        # Handle both single ID and list of IDs
+        if isinstance(pos_categ_ids, list):
+            pos_categ_ids = pos_categ_ids[0][2] if pos_categ_ids[0][0] == 6 else [pos_categ_ids[0][1]]
+        elif isinstance(pos_categ_ids, tuple):
+            pos_categ_ids = [pos_categ_ids[0][1]]
+        else:
+            pos_categ_ids = [pos_categ_ids]
+        
+        categories = self.env['pos.category'].browse(pos_categ_ids).exists()
+        return any(categories.mapped('menupro_id'))
 
     def _process_single_product(self, vals):
         """Helper method to process a single product creation."""
@@ -111,9 +140,16 @@ class ProductTemplate(models.Model):
     def write(self, vals):
         res = super(ProductTemplate, self).write(vals)
         for product in self:
+            _logger.debug("Updating product: %s", product.name)
+
             if product.is_storable is True:
                 continue
-            self._create_or_update_menupro_menu(product)
+            # Check if product needs to be created in MenuPro during update
+            if not product.menupro_id and self._should_create_in_menupro_for_update(product):
+                self._create_product_in_menupro(product)
+            else:
+                # Normal update flow
+                self._create_or_update_menupro_menu(product)
 
         # If image_1920 is updated, upload the new image to S3 and update MenuPro
         # if 'image_1920' in vals and vals["image_1920"]:
@@ -122,6 +158,45 @@ class ProductTemplate(models.Model):
         # self._upload_image_to_menupro(vals, product.menupro_id)
         _logger.info(f'\033[92mSuccessfully updated the menu with vals {vals} in MenuPro and Odoo Servers\033[0m')  # Green
         return res
+
+    def _should_create_in_menupro_for_update(self, product):
+        """ Check if product should be created in MenuPro during update (no menupro_id but has pos_category) """
+        if not product.pos_categ_ids:
+            return False
+        # Check if any pos_category has menupro_id - Optimized to avoid N+1
+        # Use any() with mapped() to check in one operation
+        if any(product.pos_categ_ids.mapped('menupro_id')):
+            return True
+        
+        _logger.debug("Product %s has pos_category but none have menupro_id - skipping MenuPro creation", product.name)
+        return False
+
+    def _create_product_in_menupro(self, product):
+        """ Create product in MenuPro during update """
+        try:
+            api_url = tools.config.get("menu_url")
+            odoo_secret_key = tools.config.get("odoo_secret_key")
+            if not odoo_secret_key:
+                _logger.error("odoo_secret_key missing")
+                return
+
+            # Prepare data for MenuPro
+            data = self.prepare_data(product)
+            _logger.debug("MenuPro data prepared for product %s", product.name)
+            response = requests.post(api_url, json=data, headers={'x-odoo-key': odoo_secret_key})
+            
+            if response.status_code in [200, 201]:
+                response_data = response.json()
+                menupro_id = response_data.get('id')
+                if menupro_id:
+                    product.write({'menupro_id': menupro_id})
+                else:
+                    _logger.warning("Failed to get menupro_id from response for product %s", product.name)
+            else:
+                _logger.error("Failed to create product %s in MenuPro. Status: %s", product.name, response.status_code)
+                
+        except Exception as e:
+            _logger.error("Error creating product %s in MenuPro: %s", product.name, e, exc_info=True)
 
     def _create_or_update_menupro_menu(self, product):
         # Get data
@@ -138,16 +213,21 @@ class ProductTemplate(models.Model):
             api_url = f"{tools.config.get('menu_url')}/{product.menupro_id}"
             existing_product = self.env['product.template'].search([('id', '=', product.id)], limit=1)
 
-            # Update category
-            if 'categ_id' in product:
-                category = http.request.env['product.category'].sudo().search(
-                    [('id', '=', product['categ_id'].id)]).menupro_id
-                if category is not None:
-                    # Update in the menupro Server
-                    data['menuCateg'] = category
+            # Update category using POS category menupro_id (not product category)
+            menu_categ_id = self._get_menu_categ_from_pos_categories(product.pos_categ_ids)
+            if menu_categ_id:
+                data['menuCateg'] = menu_categ_id
 
             # Call API to update menu in MenuPro
             response = requests.patch(api_url, json=data,  headers={'x-odoo-key': odoo_secret_key})
+            _logger.debug("MenuPro update response - Status: %s, URL: %s", response.status_code, response.request.url)
+            
+            # Log detailed info only in debug mode, and mask sensitive headers
+            if _logger.isEnabledFor(logging.DEBUG):
+                safe_headers = {k: v if k not in ['x-odoo-key', 'x-secret-key'] else '***MASKED***' 
+                               for k, v in response.request.headers.items()}
+                _logger.debug("Response details - Reason: %s, Headers: %s", response.reason, safe_headers)
+
             if response.status_code != 200:
                 return "There is a problem while updating Menupro Menu"
 
@@ -216,40 +296,111 @@ class ProductTemplate(models.Model):
             list_price = product.get('list_price', 0.0)
             name = product.get('name', '')
             description = product.get('description', '') or ''
+            pos_categ_ids = product.get('pos_categ_ids', [])
+            self_order_available = product.get('self_order_available', True)
         else:
             list_price = getattr(product, 'list_price', 0.0)
             name = getattr(product, 'name', '')
             description = getattr(product, 'description', '') or ''
-
+            pos_categ_ids = getattr(product, 'pos_categ_ids', [])
+            self_order_available = getattr(product, 'self_order_available', True)
         api_url = tools.config.get("api_url")
         if api_url is None:
-            return "There is no API_URL in Config"
+            _logger.error("There is no API_URL in Config")
+            return {}
 
         restaurant_id = self.env['ir.config_parameter'].sudo().get_param('restaurant_id')
         if restaurant_id is None:
-            return "There is no restaurant ID in Config"
+            _logger.error("There is no restaurant ID in Config")
+            return {}
 
         secret_key = tools.config.get("secret_key")
         if secret_key is None:
-            return "There is no secret_key in Config"
+            _logger.error("There is no secret_key in Config")
+            return {}
 
-        response = requests.get(api_url + restaurant_id, headers={'x-secret-key': secret_key})
-        if response.status_code == 200:
-            restaurant = response.json()
-            name_restaurant = restaurant.get('name')
+        try:
+            response = requests.get(api_url + restaurant_id, headers={'x-secret-key': secret_key})
+            if response.status_code == 200:
+                restaurant = response.json()
+                name_restaurant = restaurant.get('name')
 
-            data = {
-                'title': name,
-                'price': list_price,
-                'description': description,
-                'restaurantId': restaurant_id,
-                'restaurantName': name_restaurant,
-                'synchronizeOdoo': datetime.today().isoformat()
-            }
-            return data
+                data = {
+                    'title': name,
+                    'price': list_price,
+                    'description': description,
+                    'restaurantId': restaurant_id,
+                    'restaurantName': name_restaurant,
+                    'synchronizeOdoo': datetime.today().isoformat()
+                }
+
+                # Add menuCateg from first POS category with menupro_id (not product category)
+                menu_categ_id = self._get_menu_categ_from_pos_categories(pos_categ_ids)
+                if menu_categ_id:
+                    data['menuCateg'] = menu_categ_id
+
+                if self_order_available is False:
+                    data['status'] = 'BLOCKED'
+                else:
+                    data['status'] = 'PUBLISHED'
+                
+                _logger.debug("Prepared MenuPro data for product: %s", data.get('title'))
+                return data
+            else:
+                _logger.error("There is a problem while getting restaurant Info")
+                return {}
+        except Exception as e:
+            _logger.error(f"Error preparing data: {e}")
+            return {}
+
+    def _get_menu_categ_from_pos_categories(self, pos_categ_ids):
+        """Get menupro_id from first POS category that has menupro_id"""
+        if not pos_categ_ids:
+            return None
+
+        # Convert pos_categ_ids to a list of IDs
+        category_ids = []
+
+        # Handle different pos_categ_ids formats
+        if isinstance(pos_categ_ids, list) and pos_categ_ids:
+            if isinstance(pos_categ_ids[0], tuple):
+                if pos_categ_ids[0][0] == 6:  # Replace operation (6, 0, [ids])
+                    category_ids = pos_categ_ids[0][2] if pos_categ_ids[0][2] else []
+                elif pos_categ_ids[0][0] == 4:  # Link operation (4, id, 0)
+                    category_ids = [pos_categ_ids[0][1]]
+                elif pos_categ_ids[0][0] == 3:  # Unlink operation (3, id, 0)
+                    category_ids = []
+            else:
+                # Already a list of IDs
+                category_ids = pos_categ_ids
+        elif isinstance(pos_categ_ids, tuple):
+            if pos_categ_ids[0] == 6:
+                category_ids = pos_categ_ids[2] if pos_categ_ids[2] else []
+            elif pos_categ_ids[0] == 4:
+                category_ids = [pos_categ_ids[1]]
+        # If pos_categ_ids is a recordset
+        elif hasattr(pos_categ_ids, '_name') and pos_categ_ids._name == 'pos.category':
+            category_ids = pos_categ_ids.ids
         else:
-            return "There is a problem while getting restaurant Info"
+            # Try to use it as a single ID
+            try:
+                category_ids = [int(pos_categ_ids)]
+            except (ValueError, TypeError):
+                return None
 
+        # Find first POS category with menupro_id - Optimized to avoid N+1
+        # Browse all categories at once instead of one by one
+        try:
+            categories = self.env['pos.category'].browse([int(cid) for cid in category_ids]).exists()
+            for pos_category in categories:
+                if pos_category.menupro_id:
+                    _logger.debug("Using menuCateg from POS category '%s' with menupro_id: %s", 
+                                 pos_category.name, pos_category.menupro_id)
+                    return pos_category.menupro_id
+        except Exception as e:
+            _logger.error(f"Error processing pos_category IDs: {e}")
+
+        return None
     def get_s3_signed_url(self, image, id_menu):
         get_signedurl_url = tools.config.get('get_signedurl_menu_url') + '?menuPicName=' + image + '&idMenu=' + id_menu
         if not get_signedurl_url:

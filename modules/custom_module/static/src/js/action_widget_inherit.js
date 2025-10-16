@@ -4,119 +4,187 @@ import { patch } from "@web/core/utils/patch";
 import { ActionpadWidget } from "@point_of_sale/app/screens/product_screen/action_pad/action_pad";
 
 const disableInteractionOnOldOrders = (orderLines, isAdmin) => {
-    console.log("disableInteractionOnOldOrders");
-    orderLines.forEach(line => {
-        // Only disable interaction for orders that have been sent to kitchen (don't have has-change class)
-        if (!isAdmin && line.classList.contains("orderline") && !line.classList.contains("text-success") && !line.classList.contains("has-change")) {
-            line.classList.remove("cursor-pointer");
-            line.style.pointerEvents = "none";
-            line.style.userSelect = "none";
-            line.style.cursor = "not-allowed";
-        }
-        // Re-enable interaction for orders that haven't been sent to kitchen (have has-change class)
-        else if (line.classList.contains("orderline") && line.classList.contains("has-change")) {
-            line.style.pointerEvents = "";
-            line.style.userSelect = "";
-            line.style.cursor = "";
-            if (!line.classList.contains("cursor-pointer")) {
-                line.classList.add("cursor-pointer");
-            }
-        }
-    });
+  orderLines.forEach((line) => {
+    // Only disable interaction for orders that have been sent to kitchen (don't have has-change class)
+    if (
+      !isAdmin &&
+      line.classList.contains("orderline") &&
+      !line.classList.contains("text-success") &&
+      !line.classList.contains("has-change")
+    ) {
+      line.classList.remove("cursor-pointer");
+      line.style.pointerEvents = "none";
+      line.style.userSelect = "none";
+      line.style.cursor = "not-allowed";
+    }
+    // Re-enable interaction for orders that haven't been sent to kitchen (have has-change class)
+    else if (
+      line.classList.contains("orderline") &&
+      line.classList.contains("has-change")
+    ) {
+      line.style.pointerEvents = "";
+      line.style.userSelect = "";
+      line.style.cursor = "";
+      if (!line.classList.contains("cursor-pointer")) {
+        line.classList.add("cursor-pointer");
+      }
+    }
+  });
 };
 
 const removeSelectedClass = () => {
-    console.log("removeSelectedClass");
-    const selectedOrderLines = document.querySelectorAll(".orderline.selected");
-    selectedOrderLines.forEach(el => {
-        el.classList.remove("selected");
-    });
+  //  console.log("removeSelectedClass");
+  const selectedOrderLines = document.querySelectorAll(".orderline.selected");
+  selectedOrderLines.forEach((el) => {
+    el.classList.remove("selected");
+  });
 };
 
 function checkForChanges() {
-    let hasOtherChanges = false;
-    const orderLines = document.querySelectorAll('.order-container .orderline');
-    for (const line of orderLines) {
-        if (line.classList.contains('has-change')) {
-            hasOtherChanges = true;
-            break;
-        }
+  let hasOtherChanges = false;
+  const orderLines = document.querySelectorAll(".order-container .orderline");
+  for (const line of orderLines) {
+    if (line.classList.contains("has-change")) {
+      hasOtherChanges = true;
+      break;
     }
-    return hasOtherChanges;
+  }
+  return hasOtherChanges;
 }
 
 patch(ActionpadWidget.prototype, {
-    setup() {
-        super.setup(...arguments);
-        try {
-            const pos = this.pos;
-            const currentUser = pos.cashier;
-            const isAdmin = currentUser._role === "admin" || currentUser._role === "manager";
+  setup() {
+    super.setup(...arguments);
+    try {
+      const pos = this.pos;
+      const currentUser = pos.cashier;
+      const isAdmin =
+        currentUser._role === "admin" || currentUser._role === "manager";
 
-            setTimeout(() => {
-                if (!isAdmin) {
-                    if(!checkForChanges()){
-                        const numpadButtons = document.querySelectorAll(".numpad button");
-                        numpadButtons.forEach(button => {
-                            button.disabled = true;
-                            button.style.pointerEvents = "none";
-                            console.log(' after ActionpadWidget call')
-                        });
-                    }
+      // Vérifier si la commande est en mode takeaway (floating order uniquement)
+      const isTakeawayOrder = () => {
+        const currentOrder = pos.get_order();
+        if (!currentOrder) return false;
 
-                    const allOrderLines = document.querySelectorAll(".orderline");
-                    console.log("allOrderLines", allOrderLines);
-                    disableInteractionOnOldOrders(allOrderLines, isAdmin);
+        // Vérifier si table_id est null, false, ou un objet avec id null
+        const hasNoTable =
+          !currentOrder.table_id ||
+          currentOrder.table_id === null ||
+          (typeof currentOrder.table_id === "object" &&
+            currentOrder.table_id.id === null);
+        const isFloating = currentOrder.takeaway === true && hasNoTable;
+        return isFloating;
+      };
 
-                    const sentOrderLines = document.querySelectorAll(".orderline:not(.has-change).selected");
-                    sentOrderLines.forEach(el => {
-                        el.classList.remove("selected");
-                    });
-                }
-            }, 100);
+      setTimeout(() => {
+        if (isTakeawayOrder()) {
+          console.log("isTakeawayOrder()", isTakeawayOrder());
+          const actionsButton = document.querySelector(".more-btn");
+          if (actionsButton) {
+            actionsButton.disabled = true;
+            actionsButton.style.pointerEvents = "none";
+            actionsButton.style.opacity = "0.5";
+            //            console.log("Actions button disabled: order is takeaway");
+          }
 
-            // Observer to monitor UI changes
-            const orderContainer = document.querySelector(".order-container");
-            if (orderContainer) {
-                const observer = new MutationObserver(() => {
-                    if (!isAdmin) {
-                        const allOrderLines = document.querySelectorAll(".orderline");
-                        disableInteractionOnOldOrders(allOrderLines, isAdmin);
+          // Désactiver tous les boutons du numpad pour les commandes takeaway
+          const numpadButtons = document.querySelectorAll(".numpad button");
+          numpadButtons.forEach((button) => {
+            button.disabled = true;
+            button.style.pointerEvents = "none";
+            button.style.opacity = "0.5";
+          });
+          //          console.log("All numpad buttons disabled: order is takeaway");
+        }
 
-                        if(!checkForChanges()){
-                            const numpadButtons = document.querySelectorAll(".numpad button");
-                            numpadButtons.forEach(button => {
-                                button.style.pointerEvents = "none";
-                                button.disabled = true;
-                            });
-                        } else {
-                            // Re-enable numpad if there are changes
-                            const numpadButtons = document.querySelectorAll(".numpad button");
-                            numpadButtons.forEach(button => {
-                                button.style.pointerEvents = "";
-                                button.disabled = false;
-                            });
-                        }
+        if (!isAdmin) {
+          if (!checkForChanges()) {
+            const numpadButtons = document.querySelectorAll(".numpad button");
+            numpadButtons.forEach((button) => {
+              button.disabled = true;
+              button.style.pointerEvents = "none";
+              //              console.log(" after ActionpadWidget call");
+            });
+          }
 
-                        console.log("allOrderLines", allOrderLines);
+          const allOrderLines = document.querySelectorAll(".orderline");
+          //          console.log("allOrderLines", allOrderLines);
+          disableInteractionOnOldOrders(allOrderLines, isAdmin);
 
-                        const sentOrderLines = document.querySelectorAll(".orderline:not(.has-change).selected");
-                        sentOrderLines.forEach(el => {
-                            el.classList.remove("selected");
-                        });
-                    }
-                });
-                observer.observe(orderContainer, { subtree: true, childList: true });
+          const sentOrderLines = document.querySelectorAll(
+            ".orderline:not(.has-change).selected"
+          );
+          sentOrderLines.forEach((el) => {
+            el.classList.remove("selected");
+          });
+        }
+      }, 100);
+
+      // Observer to monitor UI changes
+      const orderContainer = document.querySelector(".order-container");
+      if (orderContainer) {
+        const observer = new MutationObserver(() => {
+          // Désactiver le bouton Actions et tous les boutons du numpad pour les commandes takeaway
+          if (isTakeawayOrder()) {
+            console.log("isTakeawayOrder()", isTakeawayOrder());
+            const actionsButton = document.querySelector(".more-btn");
+            if (actionsButton) {
+              actionsButton.disabled = true;
+              actionsButton.style.pointerEvents = "none";
+              actionsButton.style.opacity = "0.5";
             }
 
-        } catch (error) {
-            console.error("Une erreur s'est produite dans le patch de ProductScreen :", error);
-        }
-    },
+            // Désactiver tous les boutons du numpad pour les commandes takeaway
+            const numpadButtons = document.querySelectorAll(".numpad button");
+            numpadButtons.forEach((button) => {
+              button.disabled = true;
+              button.style.pointerEvents = "none";
+              button.style.opacity = "0.5";
+            });
+          }
 
-    async submitOrder() {
-        const res = await super.submitOrder();
-        this.pos.showScreen("FloorScreen");
-        return res;
-    },
+          if (!isAdmin) {
+            const allOrderLines = document.querySelectorAll(".orderline");
+            disableInteractionOnOldOrders(allOrderLines, isAdmin);
+
+            if (!checkForChanges()) {
+              const numpadButtons = document.querySelectorAll(".numpad button");
+              numpadButtons.forEach((button) => {
+                button.style.pointerEvents = "none";
+                button.disabled = true;
+              });
+            } else {
+              // Re-enable numpad if there are changes
+              const numpadButtons = document.querySelectorAll(".numpad button");
+              numpadButtons.forEach((button) => {
+                button.style.pointerEvents = "";
+                button.disabled = false;
+              });
+            }
+
+            //            console.log("allOrderLines", allOrderLines);
+
+            const sentOrderLines = document.querySelectorAll(
+              ".orderline:not(.has-change).selected"
+            );
+            sentOrderLines.forEach((el) => {
+              el.classList.remove("selected");
+            });
+          }
+        });
+        observer.observe(orderContainer, { subtree: true, childList: true });
+      }
+    } catch (error) {
+      console.error(
+        "Une erreur s'est produite dans le patch de ProductScreen :",
+        error
+      );
+    }
+  },
+
+  async submitOrder() {
+    const res = await super.submitOrder();
+    this.pos.showScreen("FloorScreen");
+    return res;
+  },
 });
