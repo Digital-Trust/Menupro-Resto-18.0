@@ -65,6 +65,7 @@ class ProductAttribute(models.Model):
         }
         try:
             resp = requests.request(method, url, json=json, headers=headers, timeout=10)
+            _logger.info(f"resp of _call_mp => {resp.text}")
             resp.raise_for_status()
             return resp.json() if resp.text else {}
         except Exception as e:
@@ -86,6 +87,7 @@ class ProductAttribute(models.Model):
         for rec in records:
             # Create with empty values first
             payload = rec._build_payload()
+            _logger.info("** Payload in CREATE => %s ", payload)
             payload['values'] = []
 
             data = rec._call_mp("POST", base, payload)
@@ -133,6 +135,7 @@ class ProductAttribute(models.Model):
 
         for rec in self:
             payload = rec._build_payload()
+            _logger.info("** Payload for WRITE => %s ", payload)
 
             if not rec.menuproId:
                 payload['values'] = []
