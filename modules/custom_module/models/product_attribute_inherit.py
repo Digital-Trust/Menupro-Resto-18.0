@@ -70,6 +70,7 @@ class ProductAttribute(models.Model):
         }
         try:
             resp = requests.request(method, url, json=json, headers=headers, timeout=10)
+            _logger.info("resp of _call_mp => ", resp)
             resp.raise_for_status()
             return resp.json() if resp.text else {}
         except Exception as e:
@@ -83,7 +84,9 @@ class ProductAttribute(models.Model):
         base = cfg['attributs_url']
 
         for rec in records:
-            data = rec._call_mp("POST", base, rec._build_payload())
+            payload = rec._build_payload()
+            _logger.info("** Payload in CREATE => ", payload)
+            data = rec._call_mp("POST", base, payload)
             rec.menuproId = data.get("_id")
 
             # map des valeurs
@@ -99,6 +102,7 @@ class ProductAttribute(models.Model):
 
         for rec in self:
             payload = rec._build_payload()
+            _logger.info("** Payload for WRITE => ", payload)
 
             if not rec.menuproId:
                 response = rec._call_mp("POST", base, payload)
