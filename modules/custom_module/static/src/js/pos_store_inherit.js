@@ -47,32 +47,45 @@ patch(PosStore.prototype, {
   },
 
   getPrintingChanges(order, diningModeUpdate) {
-    const time = DateTime.now().toFormat("dd/MM/yyyy HH:mm");
-    const cashier_id = Number(
-      sessionStorage.getItem(`connected_cashier_${this.config.id}`)
-    );
-    const currentCashier = this.models["hr.employee"].get(cashier_id);
-    return {
-      table_name: order.table_id?.table_number || "",
-      floor_name: order.table_id?.floor_id?.name || "",
-      floating_order_name: order.floating_order_name || "",
-      config_name: order.config.name,
-      time: time,
-      tracking_number: order.tracking_number,
-      ticket_number: order.ticket_number,
-      takeaway: order.config.takeaway && order.takeaway,
-      employee_name: currentCashier.name || order.employee_id?.name,
-      //employee_name: order.employee_id?.name || order.user_id?.name,
-      order_note: order.general_note,
-      diningModeUpdate: diningModeUpdate,
-    };
+      const time = DateTime.now().toFormat("dd/MM/yyyy HH:mm");
+      const cashier_id = Number(sessionStorage.getItem(`connected_cashier_${this.config.id}`));
+      const currentCashier = this.models["hr.employee"].get(cashier_id);
+
+      return {
+        table_name: order?.table_id?.table_number || "",
+        floor_name: order?.table_id?.floor_id?.name || "",
+        floating_order_name: order?.floating_order_name || "",
+        config_name: order?.config?.name || this.config?.name || "",
+        time,
+        tracking_number: order?.tracking_number || "",
+        ticket_number: order?.ticket_number || "",
+        takeaway: !!(order?.config?.takeaway && order?.takeaway),
+        employee_name: currentCashier?.name || order?.employee_id?.name || "",
+        order_note: order?.general_note || "",
+        diningModeUpdate,
+      };
   },
 
+
   getReceiptHeaderData(order) {
-    const result = super.getReceiptHeaderData(...arguments);
-    result.ticket_number = order.ticket_number;
-    result.floating_order_name = order.floating_order_name || "";
-    return result;
+      const now = DateTime.now().toFormat("dd/LL/yyyy HH:mm");
+      const safeOrder = order || this.get_order?.() || null;
+
+      let base = {};
+      try {
+        base = super.getReceiptHeaderData?.(safeOrder) || {};
+      } catch (e) {
+        base = {};
+      }
+
+      return {
+        ...base,
+        ticket_number: safeOrder?.ticket_number || "",
+        floating_order_name: safeOrder?.floating_order_name || "",
+        is_cash_operation: !safeOrder,
+        date: base.date || now,
+        pos_name: base.pos_name || this.config?.name || this.pos?.config?.name || "",
+      };
   },
   async addLineToOrder(vals, order, opts = {}, configure = true) {
     const lines = order.last_order_preparation_change?.lines || {};
