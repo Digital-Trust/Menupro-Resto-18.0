@@ -3,6 +3,7 @@ from odoo.http import request
 import requests
 import json
 import logging
+import time
 _logger = logging.getLogger(__name__)
 
 
@@ -62,21 +63,66 @@ class SystemParameterController(http.Controller):
     @http.route('/custom_module/public_ip', type='json', auth='public', methods=['POST'])
     def get_public_ip(self):
         data = json.loads(request.httprequest.data.decode('utf-8'))
-        print_url = request.env['ir.config_parameter'].sudo().get_param('print_url')
+        config_params = request.env['ir.config_parameter'].sudo()
+        print_url = config_params.get_param('print_url')
+
         if print_url:
-            print_receipt_url = f"{data['public_ip']}/print_receipt"
+            print_receipt_url = f"{print_url}/print_receipt"
         else:
-            print_port = request.env['ir.config_parameter'].sudo().get_param('print_port')
+            print_port = config_params.get_param('print_port')
             if not print_port:
                 return {'error': 'Public IP "print_port" not configured'}
             print_receipt_url = f"http://{data['public_ip']}:{print_port}/print_receipt"
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post(print_receipt_url, headers=headers, json=data)
-        _logger.debug("Print full order response status: %s", response.status_code)
 
-        if response.status_code == 200:
-            _logger.info("Print full order successful, response: %s", response.status_code)
-            return True
-        else:
-            return {'error': f"Failed to print: {response.status_code} - {response.text}"}
+        headers = {'Content-Type': 'application/json'}
+
+        try:
+            response = requests.post(print_receipt_url, headers=headers, json=data, timeout=10)
+            print("resp", response)
+            _logger.debug("Print full order response status: %s", response.status_code)
+
+            if response.status_code == 200:
+                _logger.info("Print full order successful, response: %s", response.status_code)
+                return True
+            elif response.status_code == 503 and print_url:
+                # Local tunnel unavailable, wait for new URL
+                _logger.warning("Local tunnel unavailable (503), waiting for service restart...")
+                old_url = print_url
+                max_wait = 60  # Maximum 60 seconds
+                wait_interval = 5  # Check every 5 seconds
+                elapsed = 0
+
+                while elapsed < max_wait:
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+
+                    refreshed_print_url = config_params.get_param('print_url')
+
+                    if refreshed_print_url and refreshed_print_url != old_url:
+                        _logger.info(f"New URL detected after {elapsed}s: {refreshed_print_url}")
+                        print_receipt_url = f"{refreshed_print_url}/print_receipt"
+
+                        # Retry the print request
+                        response = requests.post(print_receipt_url, headers=headers, json=data, timeout=10)
+                        print("response 2", response)
+                        _logger.debug("Retry print response status: %s", response.status_code)
+
+                        if response.status_code == 200:
+                            _logger.info("Print successful on retry")
+                            return True
+                        else:
+                            return {'error': f"Failed to print after retry: {response.status_code} - {response.text}"}
+
+                    _logger.debug(f"Still waiting for new URL... ({elapsed}s elapsed)")
+
+                return {'error': 'Print service restart timeout - no new URL received'}
+            else:
+                return {'error': f"Failed to print: {response.status_code} - {response.text}"}
+
+        except requests.exceptions.Timeout:
+            _logger.error("Print request timed out")
+            return {'error': 'Print request timed out'}
+        except requests.exceptions.RequestException as e:
+            _logger.error("Print request failed: %s", str(e))
+            return {'error': f'Print request failed: {str(e)}'}
 
