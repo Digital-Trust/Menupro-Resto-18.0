@@ -88,8 +88,8 @@ class SystemParameterController(http.Controller):
                 # Local tunnel unavailable, wait for new URL
                 _logger.warning("Local tunnel unavailable (503), waiting for service restart...")
                 old_url = print_url
-                max_wait = 60  # Maximum 60 seconds
-                wait_interval = 5  # Check every 5 seconds
+                max_wait = 60
+                wait_interval = 5
                 elapsed = 0
 
                 while elapsed < max_wait:
